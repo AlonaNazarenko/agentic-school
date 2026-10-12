@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Air Alert Forecast</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f3ef;
+  --surface-1: #fcfcfb;
+  --border: #e2e1dc;
+  --grid: #ecebe6;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #77766f;
+  --accent: #2a78d6;
+  --nodata: #d9d8d2;
+  --outline-alert: #0b0b0b;
+  /* sequential ramp (blue, light → dark) */
+  --s0: #cde2fb; --s1: #9ec5f4; --s2: #6da7ec; --s3: #3987e5; --s4: #256abf; --s5: #184f95; --s6: #0d366b;
+  --ua-blue: #0057b7; --ua-yellow: #ffd700;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --border: #33332f; --grid: #2a2a27;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --accent: #3987e5; --nodata: #3a3a36; --outline-alert: #ffffff;
+    --s0: #0d366b; --s1: #104281; --s2: #1c5cab; --s3: #2a78d6; --s4: #5598e7; --s5: #86b6ef; --s6: #cde2fb;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211; --surface-1: #1a1a19; --border: #33332f; --grid: #2a2a27;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --accent: #3987e5; --nodata: #3a3a36; --outline-alert: #ffffff;
+  --s0: #0d366b; --s1: #104281; --s2: #1c5cab; --s3: #2a78d6; --s4: #5598e7; --s5: #86b6ef; --s6: #cde2fb;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 14px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-feature-settings: "tnum" 1;
+}
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 40px; }
+
+header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; gap: 12px; align-items: center; }
+.flag { width: 8px; height: 40px; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column; flex: none; }
+.flag i { flex: 1; } .flag i:first-child { background: var(--ua-blue); } .flag i:last-child { background: var(--ua-yellow); }
+h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--text-secondary); margin: 2px 0 0; font-size: 13px; }
+.notice {
+  font-size: 12px; color: var(--text-secondary); border: 1px solid var(--border); background: var(--surface-1);
+  padding: 6px 10px; border-radius: 8px; max-width: 420px;
+}
+.notice b { color: var(--text-primary); }
+.theme-btn { border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+  border-radius: 8px; padding: 6px 10px; cursor: pointer; font: inherit; font-size: 12px; }
+
+.controls {
+  margin: 18px 0 14px; display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+}
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: transparent; color: var(--text-secondary); padding: 7px 12px; font: inherit;
+  font-weight: 500; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.ctl-label { font-size: 12px; color: var(--text-muted); margin-right: 6px; }
+.play { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface-0);
+  color: var(--text-primary); cursor: pointer; font-size: 14px; flex: none; }
+.timebox { display: flex; align-items: center; gap: 10px; flex: 1 1 360px; min-width: 0; }
+input[type=range] { flex: 1; min-width: 0; accent-color: var(--accent); }
+.when { font-weight: 600; white-space: nowrap; min-width: 150px; text-align: right; }
+.speed select, .jump { border: 1px solid var(--border); background: var(--surface-0); color: var(--text-primary);
+  border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 12px; cursor: pointer; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr); gap: 14px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-width: 0; }
+.card h2 { font-size: 13px; font-weight: 600; margin: 0 0 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+
+#map { width: 100%; height: auto; display: block; }
+#map path.ob { stroke: var(--surface-1); stroke-width: 1.2; cursor: pointer; transition: fill .25s; }
+#map path.ob:hover { stroke: var(--text-primary); stroke-width: 1.5; }
+#map path.alert { fill: none; stroke: var(--outline-alert); stroke-width: 2.4; stroke-dasharray: 5 3; pointer-events: none; }
+#map path.nodata { fill: url(#hatch); stroke: var(--surface-1); stroke-width: 1.2; }
+#map circle.kyiv { stroke: var(--surface-1); stroke-width: 2; cursor: pointer; }
+#map circle.kyiv-alert { fill: none; stroke: var(--outline-alert); stroke-width: 2.4; stroke-dasharray: 4 2; pointer-events: none; }
+#map text { font-size: 11px; fill: var(--text-primary); paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px;
+  pointer-events: none; font-weight: 500; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+.ramp { display: flex; align-items: flex-end; gap: 2px; }
+.ramp div { text-align: center; }
+.ramp span { display: block; width: 44px; height: 12px; border-radius: 3px; }
+.ramp small { display: block; margin-top: 3px; font-size: 10.5px; color: var(--text-muted); }
+.key { display: inline-flex; gap: 6px; align-items: center; }
+.key svg { flex: none; }
+
+.kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+.kpi { border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.kpi .v { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.kpi .l { font-size: 11.5px; color: var(--text-muted); }
+
+.rank { list-style: none; margin: 0; padding: 0; }
+.rank li { display: grid; grid-template-columns: 110px 1fr 52px 18px; gap: 8px; align-items: center; padding: 4px 0;
+  border-bottom: 1px solid var(--grid); font-size: 13px; cursor: default; }
+.rank li:last-child { border-bottom: 0; }
+.rank .bar { height: 10px; background: var(--grid); border-radius: 0 4px 4px 0; overflow: hidden; }
+.rank .bar i { display: block; height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; }
+.rank .pv { text-align: right; font-weight: 600; }
+.rank .oc { text-align: center; color: var(--text-secondary); font-size: 12px; }
+.rank .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rank .nm .dot { display: inline-block; width: 7px; height: 7px; border: 1.5px dashed var(--outline-alert); border-radius: 50%; margin-left: 4px; vertical-align: 1px; }
+.hint { font-size: 11.5px; color: var(--text-muted); margin-top: 8px; }
+
+#tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; box-shadow: 0 6px 24px rgba(0,0,0,.14);
+  min-width: 200px; opacity: 0; transition: opacity .1s; z-index: 10; }
+#tip .t { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+#tip .r { display: flex; justify-content: space-between; gap: 16px; color: var(--text-secondary); }
+#tip .r b { color: var(--text-primary); }
+
+.method { margin-top: 14px; font-size: 12.5px; color: var(--text-secondary); }
+.method summary { cursor: pointer; font-weight: 600; color: var(--text-primary); }
+.method table { border-collapse: collapse; margin-top: 8px; width: 100%; max-width: 640px; }
+.method td, .method th { border-bottom: 1px solid var(--grid); padding: 5px 8px; text-align: left; }
+.method th { color: var(--text-muted); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="flag" aria-hidden="true"><i></i><i></i></div>
+      <div>
+        <h1>Air raid alert forecast — Ukraine</h1>
+        <p class="sub" id="sub"></p>
+      </div>
+    </div>
+    <div style="display:flex; gap:8px; align-items:flex-start; flex-wrap:wrap;">
+      <div class="notice"><b>Research prototype.</b> Historical replay of out-of-sample predictions. Not a warning system — always follow official alerts.</div>
+      <button class="theme-btn" id="themeBtn" type="button">◐ Theme</button>
+    </div>
+  </header>
+
+  <div class="controls" role="group" aria-label="Controls">
+    <div><span class="ctl-label">Horizon</span>
+      <div class="seg" id="hz"></div>
+    </div>
+    <div class="timebox">
+      <button class="play" id="play" type="button" aria-label="Play">▶</button>
+      <input type="range" id="slider" min="0" value="0" aria-label="Time">
+      <div class="when" id="when"></div>
+    </div>
+    <label class="speed"><span class="ctl-label">Speed</span>
+      <select id="speed"><option value="600">1×</option><option value="250" selected>2×</option><option value="90">5×</option></select>
+    </label>
+    <button class="jump" id="jump" type="button">Jump to busiest night</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2 id="mapTitle">Probability an alert starts</h2>
+      <svg id="map" role="img" aria-label="Map of Ukraine oblasts coloured by forecast probability"></svg>
+      <div class="legend">
+        <div class="ramp" id="ramp"></div>
+        <span class="key"><svg width="22" height="14"><rect x="1.5" y="1.5" width="19" height="11" rx="2" fill="none" stroke="var(--outline-alert)" stroke-width="2" stroke-dasharray="4 2"/></svg>On alert now</span>
+        <span class="key"><svg width="22" height="14"><rect x="1" y="1" width="20" height="12" rx="2" fill="url(#hatchKey)"/><defs><pattern id="hatchKey" width="5" height="5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="var(--nodata)"/><line x1="0" y1="0" x2="0" y2="5" stroke="var(--text-muted)" stroke-width="1.2"/></pattern></defs></svg>No forecast</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Right now</h2>
+      <div class="kpis">
+        <div class="kpi"><div class="v" id="kExp">–</div><div class="l">expected new alerts<br>(oblasts)</div></div>
+        <div class="kpi"><div class="v" id="kOn">–</div><div class="l">oblasts on alert<br>now</div></div>
+        <div class="kpi"><div class="v" id="kTop">–</div><div class="l" id="kTopL">highest risk</div></div>
+      </div>
+      <h2>Highest risk oblasts</h2>
+      <ul class="rank" id="rank"></ul>
+      <div class="hint">✓ = an alert actually started within the horizon (known only in hindsight). <span class="dot"></span> dashed ring = on alert now.</div>
+    </div>
+  </div>
+
+  <details class="method">
+    <summary>Method &amp; scores</summary>
+    <p>LightGBM model on a 5-min grid. Inputs at decision time τ use only information published before τ: each oblast's own alert history, neighbouring and upstream oblasts (lift graph learned on training data), attack-wave direction, raion-level alert shares and (if selected) official Air Force Telegram posts. Evaluated with 6 monthly walk-forward folds (Mar–Sep 2026); this page replays the test month of fold <span id="foldN"></span>.</p>
+    <table>
+      <tr><th>Mean per-oblast PR-AUC (6 folds)</th><th>15 min</th><th>30 min</th><th>60 min</th></tr>
+      <tr><td>Climatology (oblast × hour)</td><td>0.034</td><td>0.069</td><td>0.130</td></tr>
+      <tr><td>LightGBM, own history only</td><td>0.110</td><td>0.168</td><td>0.232</td></tr>
+      <tr><td><b>LightGBM v4 (spatial + raion share)</b></td><td><b>0.156</b></td><td><b>0.227</b></td><td><b>0.298</b></td></tr>
+    </table>
+  </details>
+</div>
+<div id="tip" role="tooltip"></div>
+
+<script>
+const D = /*__DATA__*/null;
+const BINS = [0, 0.02, 0.05, 0.10, 0.20, 0.35, 0.50];           // lower edges of 7 bins
+const BIN_LABELS = ["<2%", "2–5", "5–10", "10–20", "20–35", "35–50", "≥50%"];
+const NS = "http://www.w3.org/2000/svg";
+const fmtTime = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Kyiv", weekday: "short", day: "2-digit",
+  month: "short", hour: "2-digit", minute: "2-digit" });
+const pct = p => (p < 0.01 ? (p * 100).toFixed(1) : Math.round(p * 100)) + "%";
+const binOf = p => { let b = 0; for (let i = 0; i < BINS.length; i++) if (p >= BINS[i]) b = i; return b; };
+const hLabel = h => h.replace("min", " min");
+
+let hz = "30min", ti = 0, timer = null;
+const O = D.oblasts.length, idx = Object.fromEntries(D.oblasts.map((o, i) => [o, i]));
+
+// ---------- static UI
+document.getElementById("sub").textContent =
+  `Model: ${D.model} · out-of-sample test period ${fmtTime.format(new Date(D.times[0]))} – ${fmtTime.format(new Date(D.times.at(-1)))} (Kyiv time)`;
+document.getElementById("foldN").textContent = D.fold;
+const hzBox = document.getElementById("hz");
+D.horizons.forEach(h => {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = hLabel(h);
+  b.setAttribute("aria-pressed", h === hz); b.onclick = () => { hz = h; [...hzBox.children].forEach(x => x.setAttribute("aria-pressed", x === b)); render(); };
+  hzBox.appendChild(b);
+});
+document.getElementById("ramp").innerHTML = BIN_LABELS.map((l, i) =>
+  `<div><span style="background:var(--s${i})"></span><small>${l}</small></div>`).join("");
+
+// ---------- map
+const svg = document.getElementById("map");
+svg.setAttribute("viewBox", `0 0 ${D.W} ${D.H}`);
+svg.innerHTML = `<defs><pattern id="hatch" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+  <rect width="7" height="7" fill="var(--nodata)"/><line x1="0" y1="0" x2="0" y2="7" stroke="var(--text-muted)" stroke-width="1.3"/></pattern></defs>`;
+const gFill = document.createElementNS(NS, "g"), gAlert = document.createElementNS(NS, "g"), gText = document.createElementNS(NS, "g");
+svg.append(gFill, gAlert, gText);
+const shapes = {}, outlines = {};
+for (const [name, d] of Object.entries(D.paths)) {
+  const p = document.createElementNS(NS, "path"); p.setAttribute("d", d);
+  if (name in idx) {
+    p.setAttribute("class", "ob"); p.dataset.o = name; shapes[name] = p;
+    const a = document.createElementNS(NS, "path"); a.setAttribute("d", d); a.setAttribute("class", "alert"); a.style.display = "none";
+    outlines[name] = a; gAlert.appendChild(a);
+  } else {
+    p.setAttribute("class", "nodata"); p.dataset.nodata = name;
+  }
+  gFill.appendChild(p);
+}
+if ("Kyiv City" in idx) {
+  const [x, y] = D.kyiv;
+  const c = document.createElementNS(NS, "circle"); c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 9);
+  c.setAttribute("class", "kyiv"); c.dataset.o = "Kyiv City"; shapes["Kyiv City"] = c; gFill.appendChild(c);
+  const a = document.createElementNS(NS, "circle"); a.setAttribute("cx", x); a.setAttribute("cy", y); a.setAttribute("r", 12.5);
+  a.setAttribute("class", "kyiv-alert"); a.style.display = "none"; outlines["Kyiv City"] = a; gAlert.appendChild(a);
+  const t = document.createElementNS(NS, "text"); t.setAttribute("x", x + 15); t.setAttribute("y", y + 4); t.textContent = "Kyiv"; gText.appendChild(t);
+}
+
+// ---------- render
+function render() {
+  const P = D.p[hz][ti], Y = D.y[hz][ti], ON = D.on[ti];
+  for (const o of D.oblasts) {
+    const i = idx[o], p = P[i] / 1000;
+    shapes[o].style.fill = `var(--s${binOf(p)})`;
+    outlines[o].style.display = ON[i] ? "" : "none";
+  }
+  document.getElementById("when").textContent = fmtTime.format(new Date(D.times[ti]));
+  document.getElementById("mapTitle").textContent = `Probability an alert starts within ${hLabel(hz)}`;
+  document.getElementById("slider").value = ti;
+
+  const exp = P.reduce((s, v) => s + v / 1000, 0);
+  document.getElementById("kExp").textContent = exp.toFixed(1);
+  document.getElementById("kOn").textContent = ON.reduce((s, v) => s + v, 0) + " / " + O;
+  const order = [...P.keys()].sort((a, b) => P[b] - P[a]);
+  document.getElementById("kTop").textContent = pct(P[order[0]] / 1000);
+  document.getElementById("kTopL").textContent = D.labels[order[0]];
+
+  const max = Math.max(P[order[0]], 1);
+  document.getElementById("rank").innerHTML = order.slice(0, 10).map(i => {
+    const p = P[i] / 1000;
+    return `<li data-o="${D.oblasts[i]}"><span class="nm">${D.labels[i]}${ON[i] ? '<span class="dot" title="on alert now"></span>' : ""}</span>
+      <span class="bar"><i style="width:${(P[i] / max * 100).toFixed(1)}%"></i></span>
+      <span class="pv">${pct(p)}</span><span class="oc" title="${Y[i] === 1 ? "alert started" : "no alert start"}">${Y[i] === 1 ? "✓" : ""}</span></li>`;
+  }).join("");
+  if (tipFor) showTip(tipFor, lastEvt);
+}
+
+// ---------- tooltip
+const tip = document.getElementById("tip"); let tipFor = null, lastEvt = null;
+function showTip(o, e) {
+  tipFor = o; lastEvt = e;
+  if (o.startsWith("nodata:")) {
+    tip.innerHTML = `<div class="t">${o.slice(7)}</div><div class="r">No forecast (no reliable alert data)</div>`;
+  } else {
+    const i = idx[o], p = D.p[hz][ti][i] / 1000, base = D.base[hz][i], y = D.y[hz][ti][i];
+    tip.innerHTML = `<div class="t">${D.labels[i]}</div>
+      <div class="r">P(alert starts within ${hLabel(hz)}) <b>${pct(p)}</b></div>
+      <div class="r">Usual rate (test month) <b>${pct(base)}</b></div>
+      <div class="r">vs usual <b>${base > 0 ? (p / base).toFixed(1) + "×" : "–"}</b></div>
+      <div class="r">On alert now <b>${D.on[ti][i] ? "yes" : "no"}</b></div>
+      <div class="r">Outcome (hindsight) <b>${y === 1 ? "✓ alert started" : y === 0 ? "no alert start" : "–"}</b></div>`;
+  }
+  const pad = 14, r = tip.getBoundingClientRect();
+  let x = e.clientX + pad, y2 = e.clientY + pad;
+  if (x + r.width > innerWidth - 8) x = e.clientX - r.width - pad;
+  if (y2 + r.height > innerHeight - 8) y2 = e.clientY - r.height - pad;
+  tip.style.left = x + "px"; tip.style.top = y2 + "px"; tip.style.opacity = 1;
+}
+function hideTip() { tipFor = null; tip.style.opacity = 0; }
+svg.addEventListener("mousemove", e => {
+  const t = e.target;
+  if (t.dataset && t.dataset.o) showTip(t.dataset.o, e);
+  else if (t.dataset && t.dataset.nodata) showTip("nodata:" + t.dataset.nodata, e);
+  else hideTip();
+});
+svg.addEventListener("mouseleave", hideTip);
+document.getElementById("rank").addEventListener("mousemove", e => {
+  const li = e.target.closest("li"); li ? showTip(li.dataset.o, e) : hideTip();
+});
+document.getElementById("rank").addEventListener("mouseleave", hideTip);
+
+// ---------- time controls
+const slider = document.getElementById("slider");
+slider.max = D.times.length - 1;
+slider.oninput = () => { ti = +slider.value; render(); };
+const playBtn = document.getElementById("play");
+function stop() { clearInterval(timer); timer = null; playBtn.textContent = "▶"; playBtn.setAttribute("aria-label", "Play"); }
+function play() {
+  stop(); playBtn.textContent = "❚❚"; playBtn.setAttribute("aria-label", "Pause");
+  timer = setInterval(() => { ti = (ti + 1) % D.times.length; render(); }, +document.getElementById("speed").value);
+}
+playBtn.onclick = () => (timer ? stop() : play());
+document.getElementById("speed").onchange = () => { if (timer) play(); };
+document.getElementById("jump").onclick = () => {
+  // busiest moment = most oblasts on alert; start replay 3 h before it
+  let best = 0, bi = 0;
+  D.on.forEach((r, i) => { const s = r.reduce((a, b) => a + b, 0); if (s > best) { best = s; bi = i; } });
+  ti = Math.max(0, bi - 12); render();
+};
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" && e.key !== " ") return;
+  if (e.key === "ArrowRight") { ti = Math.min(ti + 1, D.times.length - 1); render(); }
+  if (e.key === "ArrowLeft") { ti = Math.max(ti - 1, 0); render(); }
+  if (e.key === " ") { e.preventDefault(); timer ? stop() : play(); }
+});
+
+// ---------- theme toggle
+document.getElementById("themeBtn").onclick = () => {
+  const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme = dark ? "light" : "dark";
+};
+
+// start on the busiest night so the first view is informative
+document.getElementById("jump").click();
+</script>
+</body>
+</html>

@@ -165,6 +165,53 @@ Raion-share features have 17 % of gain importance.
 
 ---
 
+## 7. Air Force Telegram posts, v1 — `07_telegram_features.ipynb` (Protocol B)
+- **Data:** 57,950 posts from the official Air Force channel (`kpszsu`), 25 Jan 2025 → 12 Oct 2026. 91 % are kept after dropping posts edited more than 5 min later and forwarded posts.
+- **Features:** keyword parsing (oblast names + threat type), counts over the last 15/60 min, per oblast and national.
+- **Coverage / lead time:**
+  - Only **30 %** of alert starts had a post mentioning that oblast in the previous 3 h, and **10 %** within 60 min. Median lead is 88 min.
+  - Coverage is high on the frontline (Sumy 55 %, Kharkiv 50 %), low in the rear (Vinnytsia/Cherkasy 6 %, western oblasts 1–3 %).
+
+| Mean per-oblast PR-AUC, 6 folds | 15 m | 30 m | 60 m | Rear 15 m | Rear 30 m |
+|---|---|---|---|---|---|
+| v4 | 0.156 | 0.227 | 0.298 | 0.104 | 0.153 |
+| v4 + Telegram v1 | **0.161** (5/6) | 0.227 (4/6) | 0.300 (2/6) | **0.112** (5/6) | 0.153 |
+
+Telegram features have 3.6 % of gain importance.
+
+## 8. Air Force Telegram posts, v2 — `08_telegram_features_v2.ipynb` (Protocol B)
+Additions over v1:
+- a gazetteer of 424 town/raion stems from the official raion/hromada names (posts with an oblast: 78.5 % → 83 %)
+- location vs destination (text before / after «курсом на»)
+- object counts
+- neighbour and upstream mentions over 15/60/180 min
+- counts relative to the channel's 7-day posting rate
+
+| Mean per-oblast PR-AUC, 6 folds | 15 m | 30 m | 60 m | Rear 15 m | Rear 30 m | Rear 60 m | Front 30 m |
+|---|---|---|---|---|---|---|---|
+| v4 | 0.156 | 0.227 | 0.298 | 0.104 | 0.153 | 0.213 | 0.398 |
+| v4 + Telegram v1 | 0.161 | 0.227 | 0.300 | 0.112 | 0.153 | 0.216 | 0.398 |
+| v4 + Telegram v2 | 0.159 | 0.227 | 0.299 | 0.112 | **0.156** (5/6 vs v4) | 0.216 | 0.392 |
+
+- Telegram v2 features have 8.9 % of gain importance.
+- Compared with v1, v2 is better only for rear oblasts at 30 min (+0.003). It is **worse on the frontline** (−0.005, winning 1–2/6 folds), most likely because the many extra features overfit.
+
+**Conclusion:** official Air Force posts add a **small gain for rear oblasts at 15 min (+0.008, ≈ +8 %)** and nothing overall at 30–60 min. Richer parsing (v2) did not add more. The posts seldom name a rear oblast in advance, and alerts are declared from the same Air Force information, so most of the signal is already in the alert history.
+
+---
+
+## Final summary (6-fold walk-forward, mean per-oblast PR-AUC)
+| Model | 15 min | 30 min | 60 min |
+|---|---|---|---|
+| Climatology | 0.034 | 0.069 | 0.130 |
+| LightGBM-own | 0.110 | 0.168 | 0.232 |
+| v2 | 0.152 | 0.222 | 0.295 |
+| **v4** (recommended final; alert data only) | 0.156 | **0.227** | 0.298 |
+| v4 + Telegram v1 (best at 15 min) | **0.161** | 0.227 | **0.300** |
+| v4 + Telegram v2 | 0.159 | 0.227 | 0.299 |
+
+---
+
 ## General evaluation
 
 ### Progress of the best model (30-min horizon, mean per-oblast PR-AUC)
