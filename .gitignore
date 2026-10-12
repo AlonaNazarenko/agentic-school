@@ -1,0 +1,6 @@
+.venv/
+.env
+data/
+*.session
+.pytest_cache/
+__pycache__/
