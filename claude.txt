@@ -1,0 +1,3172 @@
+
+❯ hello i have such a task  Python solving a real-world defense problem: Time
+  Series Analysis of air raid alerts in Ukraine.
+
+  Data and evaluation. Work with the most recent data available, and evaluate
+  your solution on the latest period. Make sure there is no data leakage:
+  nothing your model is trained on or uses as an input may come from after the
+  time at which the forecast is made.
+
+  Optional: text and media data. You are encouraged, but not required, to go
+  beyond the alert history and use text or media data, for example news,
+  official statements or public Telegram channels. The same rule applies: use
+  only content that was published before the time at which the forecast is
+  made.
+
+  which progect we can do?
+
+⏺ Here are five project options, from simplest to most ambitious.
+
+  1. Next-hour alert forecast per oblast ⭐ (recommended)
+
+  Task: At time t, predict the probability that an air raid alert will be active
+  in each oblast in each of the next 1, 3, 6 and 12 hours.
+  - Features: lagged alert states, time since the last alert, hour of day and
+    day of week, and alerts in neighbouring oblasts (attacks spread in a wave,
+    e.g. from the east to Kyiv).
+  - Models: start with baselines (a seasonal "same hour last week" rule, a
+    persistence model and logistic regression), then try LightGBM/XGBoost, and
+    optionally an LSTM or Temporal Fusion Transformer.
+  - Evaluation: Brier score, ROC-AUC, PR-AUC and a calibration plot on the last
+    1–2 months, using walk-forward validation.
+  - Why it's the one to pick: it's clearly defined, it's easy to keep free of
+    data leakage, and you can add more later.
+
+  2. Alert duration prediction (survival analysis)
+
+  Task: Once an alert starts, predict how long it will last.
+  - Models: Kaplan–Meier, Cox proportional hazards, gradient-boosted survival
+    models (scikit-survival, lifelines).
+  - Features: oblast, hour, how many oblasts are on alert at the same moment (a
+    proxy for how big the attack is), and how long recent alerts lasted.
+  - Practical value: helps people decide whether to go to a shelter or wait.
+
+  3. Large-scale attack night detection
+
+  Task: At 18:00 each day, predict whether the coming night will bring a massive
+  attack, for example more than 15 oblasts on alert at once.
+  - Text data (the optional part): count signals from public monitoring Telegram
+    channels before 18:00, such as mentions of "Tu-95", "takeoff", "Shahed",
+    "launches" or "МіГ-31К". Also use the Air Force's official statements. Use
+    only messages with timestamps before the forecast time.
+  - This is the most interesting option if you want to use text data, and it's
+    very relevant to defence.
+
+  4. Spatial-temporal propagation model
+
+  Model how an alert spreads between oblasts as a graph, using a Graph Neural
+  Network or a Hawkes process (a self-exciting point process).
+  - Question it answers: "Given that Kharkiv and Poltava are on alert now,
+    what's the probability that Kyiv goes on alert within 30 minutes?"
+  - This is the most advanced academically.
+
+  5. Regime/pattern analysis (more exploratory)
+
+  Use change-point detection to find when attack tactics changed, such as Shahed
+  seasons or energy-infrastructure campaigns. Then compare how well forecast
+  models hold up before and after each change.
+
+  ---
+
+  Data sources
+
+  - Alert history: the Vadimkin/ukrainian-air-raid-sirens-dataset repository on
+    GitHub (updated regularly, with oblast and hromada level data) or the
+    alerts.in.ua API.
+  - Text: public Telegram channels via Telethon (Air Force of Ukraine,
+    monitoring channels); ISW daily reports.
+  - Extras: weather (Open-Meteo, since wind affects drone flights) and moon
+    phase.
+
+  Rules that prevent data leakage
+
+  1. Split the data by time only, never randomly. Test on the most recent weeks,
+     for example the latest month of 2026.
+  2. Use walk-forward/expanding-window cross-validation.
+  3. Compute every feature only from data before t. Watch out for rolling
+     windows, normalisation and target encoding.
+  4. For Telegram, use the message's date field, and drop edited or forwarded
+     messages if their timestamps are unclear.
+
+  My suggestion: make #1 your core project, then add #3's Telegram features as
+  an extension. Show whether they improve the forecast for the hours before
+  massive night attacks. That covers both the required part and the optional
+  part.
+
+  Want me to set up the project structure and write the data download and
+  baseline model code?
+
+❯ patial-temporal propagation model
+  Model how an alert spreads between oblasts as a graph, using a Graph Neural
+  Network or a Hawkes process (a self-exciting point process).
+
+  Question it answers: "Given that Kharkiv and Poltava are on alert now, what's
+  the probability that Kyiv goes on alert within 30 minutes?"
+  This is the most advanced academically.
+  is it a time series problem?
+
+⏺ Yes. Option #4 is a time series problem, specifically a multivariate
+  spatio-temporal one.
+
+  Why it counts
+
+  - The data is a time series. Each oblast has its own series of alert states
+    over time, such as 0/1 every 5 minutes or a list of start and end
+    timestamps. With 24–25 oblasts, that's 24–25 parallel series.
+  - The forecast depends on the past. You predict the future, P(Kyiv on alert in
+    [t, t+30 min]), using only information before t. That's the definition of
+    time series forecasting.
+  - The "graph" just adds a spatial dimension. It doesn't replace the time
+    dimension. It models how one region's series affects another's, similar to a
+    VAR model but with a network structure.
+
+  Two ways to frame it
+
+  Approach: Hawkes process
+  Time series form: Event times (alert starts) for each oblast, treated as a
+  point process in continuous time
+  Classic counterpart: A point-process time series model, where each past event
+  raises the near-term risk
+  ────────────────────────────────────────
+  Approach: Graph neural network (e.g. STGCN, GraphWaveNet)
+  Time series form: A tensor of shape [time × oblast × features] at a regular
+  step (for example 5 or 15 minutes)
+  Classic counterpart: A multivariate time series where oblasts are the
+  variables
+  and their neighbours act as extra inputs
+
+  How to make it clearly time series in your report
+
+  1. Include standard time series baselines: persistence, seasonal naive (same
+     hour yesterday or last week), and VAR or logistic regression on lagged
+     values from all oblasts.
+  2. Show ACF/PACF plots, daily and weekly seasonality, and cross-correlation
+     between oblasts at different lags. For example, Kharkiv often goes on alert
+     before Kyiv, with the lag typically around X minutes.
+  3. Use rolling-origin (walk-forward) evaluation on the latest period.
+  4. Then show that the spatial model beats those baselines.
+
+  Simpler alternative with the same idea: if a GNN or Hawkes model feels too
+  heavy, use LightGBM. Give it features like "number of neighbouring oblasts on
+  alert in the last 15/30/60 minutes" and "minutes since an alert started in a
+  neighbour". It's still spatio-temporal forecasting, but much easier to build
+  and explain.
+
+❯ how this is meet with the project requiriments?
+
+⏺ Option #4 meets every requirement in your brief.
+
+  Requirement: Python
+  How option #4 meets it: pandas for the data, tick or hawkes for the Hawkes
+  process, torch-geometric-temporal for the GNN, lightgbm for the baseline
+  ────────────────────────────────────────
+  Requirement: Real-world defense problem
+  How option #4 meets it: It forecasts where an attack will spread next, which
+  affects how early people in the next oblast are warned. It's directly about
+  civilian protection.
+  ────────────────────────────────────────
+  Requirement: Time series analysis of air raid alerts in Ukraine
+  How option #4 meets it: It uses the official alert history (24–25 oblast
+  series) and models it in time: lags, seasonality, and how alerts in one
+  oblast lead alerts in another
+  ────────────────────────────────────────
+  Requirement: Most recent data
+  How option #4 meets it: Download the dataset up to the current date (October
+  2026) from the GitHub alerts dataset or the alerts.in.ua API
+  ────────────────────────────────────────
+  Requirement: Evaluate on the latest period
+  How option #4 meets it: Train on data up to about August 2026 and test on
+  September–October 2026, with walk-forward validation inside the training
+  period
+  ────────────────────────────────────────
+  Requirement: No data leakage
+  How option #4 meets it: Every input to the forecast at time t comes from
+  before
+  t: alert states, neighbours' states, and Hawkes intensity. Normalisation and
+  graph weights are fitted on training data only. The split is by time, never
+  random.
+  ────────────────────────────────────────
+  Requirement: Optional: text and media data
+  How option #4 meets it: Add features counting Telegram posts with keywords
+  like
+  "Shahed", "launches" or "Tu-95" in the last hour before t, using each
+  message's publish timestamp. Then compare the model with and without them.
+
+  One thing to watch
+
+  The task says "time series analysis", so make the time part visible, not just
+  the graph:
+  - Show exploratory analysis: daily and weekly seasonality, ACF, and
+    cross-correlation lags between oblasts.
+  - Compare against classic time series baselines: persistence, seasonal naive,
+    and VAR or logistic regression on lags.
+  - Report the results by forecast horizon (15, 30 and 60 minutes).
+
+  Suggested project title
+
+  "Forecasting the spatio-temporal spread of air raid alerts across Ukrainian
+  oblasts"
+
+  To summarise, the dataset is time series data, the task is forecasting, the
+  evaluation is time-based, and the graph is how you model the space between
+  oblasts, so it matches the requirements fully.
+
+❯ okay lets start from data analizes write me ipyton with i t
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The data is current up to 2026-09-07. It has about 300k alerts recorded at
+  oblast, raion and hromada level. Now I'll write the notebook.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I'll run the notebook once to check it works.
+
+  Ran 2 shell commands (ctrl+o to expand)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ create venv and use it
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I'll create a .venv in the project folder using Python 3.12. It's a modern
+  version, so "ME" and the other new pandas syntax work.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ The download failed with a macOS Python SSL certificate error. I'll download
+  with requests instead, which uses certifi certificates.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ That error comes from pandas 3's copy-on-write behaviour. Fixing it:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The whole notebook runs now. Let me pull out the key numbers so we can write
+  the conclusions.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I've created 01_eda_air_raid_alerts.ipynb. It runs from start to finish in a
+  project venv, and the outputs and charts are saved in the notebook.
+
+  Setup:
+  - I created .venv/ with Python 3.12 and listed the dependencies in
+    requirements.txt.
+  - I registered it as a Jupyter kernel called "Python (air-raid)", so select
+    that kernel in VS Code.
+  - I fixed three errors to get it running: the macOS SSL certificate error on
+    download (it now uses requests), a pandas 3 copy-on-write error, and an old
+    pandas frequency alias.
+
+  What the notebook does:
+  1. Loads the latest official data: 299k alerts from 15 March 2022 to 7
+     September 2026, the most recent date in the dataset.
+  2. Cleans it: converts times to Kyiv time and drops 179 broken records or
+     alerts longer than 3 days.
+  3. Merges alerts into oblast episodes: an oblast counts as on alert if any
+     oblast, raion or hromada alert is active in it. That gives 84k episodes.
+  4. Builds a 5-minute grid: a 471k × 24 table of alert states (on/off) and a
+     matching table of alert starts.
+  5. Plots the trend: the share of oblasts on alert over time, and large-scale
+     attack days (742 days with 15 or more oblasts on alert at once).
+  6. Plots seasonality: day × hour heatmap and hourly profiles by year.
+  7. Plots ACF and PACF for Kyiv City.
+  8. Measures spatial lead–lag, which is the core of your propagation model
+     (results below).
+  9. Shows a correlation clustermap of alert states between oblasts.
+  10. Splits by time: train until 9 July 2026, validation from 9 July to 8
+      August, and test from 8 August to 7 September 2026. It saves everything to
+      data/*.parquet.
+
+  First results:
+  - Median alert length is 45 minutes, but the distribution has a heavy tail:
+    10% of alerts last more than 4 hours.
+  - Early-warning oblasts for Kyiv City (last 12 months): an alert starting in
+    Kyivska oblast makes a Kyiv City alert in the next 30 minutes 4.6× more
+    likely than usual. Rivne, Cherkasy and Zhytomyr each raise it about 2×. This
+    supports the graph-based approach.
+
+  Two things to check when you look at the charts:
+  - Dnipropetrovska oblast shows 76% of the time under alert. That's because any
+    raion counts, and frontline raions like Nikopol are on alert almost
+    constantly. You might want to model frontline and rear oblasts separately.
+  - There are 25 oblasts in the raw data but 24 in the grid. One oblast lost all
+    its alerts in the "longer than 3 days" filter, probably an occupied region
+    with stuck alerts.
+
+  The last cell is for your conclusions. Fill it in once you've looked at the
+  charts. The next step would be notebook 02 with the baselines (persistence,
+  seasonal naive, logistic regression on lags). Should I write it?
+
+❯ now based on the analizes write a plan how to create this progect
+
+⏺ Write(PLAN.md)
+  ⎿  Wrote 119 lines to PLAN.md
+       1 # Project Plan: Forecasting the Spatio-Temporal Spread of Air Ra
+       2
+       3 ## 1. Problem statement
+       5
+         {15, 30, 60} min
+       7
+         all oblasts and, optionally, Telegram text published before **t*
+         *.
+      10 **Main question:** does knowing what's happening in *other* obla
+          oblast's *own* history?
+     … +168 lines (ctrl+o to expand)
+
+⏺ Written for: you, as a working plan to follow.
+
+  The plan is in PLAN.md. It turns the analysis results into specific modelling
+  choices:
+
+  - What to predict: whether an alert starts in each oblast in the next 15, 30
+    or 60 minutes. The on/off state isn't a good target because alerts last a
+    median of 45 minutes, so "still on alert" is easy to predict without a
+    model.
+  - Main question: do other oblasts' alerts improve the forecast compared with
+    using only the oblast's own history? The Kyivska → Kyiv City lift of 4.6×
+    suggests they will.
+  - Which oblasts are the main result: rear oblasts. Frontline oblasts like
+    Dnipro are on alert most of the time, so they're reported separately.
+  - Models, in order:
+    a. Baselines.
+    b. LightGBM with spatial features (the main model).
+    c. A Hawkes process, whose fitted parameters give you a propagation map you
+       can explain.
+    d. Optionally, a graph neural network and Telegram features.
+  - Leakage protection: a time-based split, with walk-forward validation inside
+    the training period. The test period (8 August – 7 September 2026) is used
+    only once, at the end. There's also an automated check that rebuilds
+    features from data cut off at the forecast time and confirms nothing
+    changes.
+  - Evaluation: PR-AUC, Brier score and calibration, plus how many minutes of
+    early warning the model gives before the official alert.
+
+  The next step is week 1 of the plan: src/features.py with the leakage test,
+  then notebook 02 with the baselines. Should I start on it?
+
+❯ <ide_opened_file>The user opened the file
+  /Users/alona/Documents/KSE/agentic/PLAN.md in the IDE. This may or may not be
+  related to the current task.</ide_opened_file>
+
+❯ okay lets make baseline snaive
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ It runs. I'll remove one leftover line from the code and then read the
+  results.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The baseline notebook is 02_baseline_snaive.ipynb. It runs from start to
+  finish in .venv, and the results are saved to data/results_02_snaive.csv.
+
+  What it does:
+  - Target: whether an alert starts in the oblast within the next 15, 30 or 60
+    minutes.
+  - Four seasonal naive variants:
+    - same window yesterday (sNaive-1d)
+    - same window a week ago (sNaive-7d)
+    - share of the last 7 days with an alert start in that window (sNaive-mean
+      7×1d)
+    - share of the last 4 weeks with an alert start in that window (sNaive-mean
+      4×7d)
+  - Climatology as a reference: the probability of an alert start by oblast and
+    hour, computed from the training data.
+  - No leakage: the lagged window always ends before the forecast time, and
+    there's an assert that checks it.
+  - Frontline and rear oblasts are separated using training data only (more than
+    25% of time on alert means frontline). That gives 8 frontline and 16 rear
+    oblasts.
+  - Outputs: PR-AUC, ROC-AUC and Brier score on the validation and test periods,
+    a precision–recall curve, a per-oblast table, and a test week for Kyiv
+    City.
+
+  Test results (rear oblasts, PR-AUC):
+
+  ┌───────────────────────────────────────┬────────┬────────┬────────┐
+  │                 Model                 │ 15 min │ 30 min │ 60 min │
+  ├───────────────────────────────────────┼────────┼────────┼────────┤
+  │ Random (base rate)                    │ 0.025  │ 0.049  │ 0.094  │
+  ├───────────────────────────────────────┼────────┼────────┼────────┤
+  │ sNaive-1d                             │ 0.029  │ 0.064  │ 0.141  │
+  ├───────────────────────────────────────┼────────┼────────┼────────┤
+  │ sNaive-7d                             │ 0.027  │ 0.059  │ 0.128  │
+  ├───────────────────────────────────────┼────────┼────────┼────────┤
+  │ sNaive-mean 7×1d (best on validation) │ 0.040  │ 0.094  │ 0.210  │
+  ├───────────────────────────────────────┼────────┼────────┼────────┤
+  │ Climatology                           │ 0.073  │ 0.145  │ 0.274  │
+  └───────────────────────────────────────┴────────┴────────┴────────┘
+
+  What this shows:
+  1. Plain sNaive is barely better than random. Attacks don't repeat at the same
+     time each day or week, so copying yesterday's window doesn't work.
+  2. Averaging over 7 days roughly doubles PR-AUC, but climatology (by hour of
+     day) is still clearly better.
+  3. Within a single oblast, sNaive gives almost nothing. In the per-oblast
+     table, PR-AUC is about the same as the base rate (lift ≈ 1.0) for Kyiv
+     City, Odesa and Kyivska. The pooled improvement mostly comes from oblasts
+     having different base rates, not from predicting when an alert will happen.
+
+  This is a good result for your project. Seasonality alone doesn't predict when
+  an alert starts, which supports the idea that the signal is in real-time
+  spatial propagation, like the Kyivska → Kyiv City lift of 4.6× from the
+  analysis.
+
+  The next step is the own-history logistic regression, then LightGBM with
+  neighbour features, to show how much the spatial features add. Want me to
+  continue?
+
+❯ okay what is the more complex model which can be used?
+
+⏺ Here are the more complex options, from the most practical to the most
+  research-level. The 5-minute alert data is already in place for all of them.
+
+  1. LightGBM with spatio-temporal features ⭐ (recommended as the main model)
+
+  - Inputs at each forecast time t:
+    - the oblast's own history: minutes since its last alert, alerts in the last
+      1/6/24 hours
+    - neighbours: minutes since Kyivska went on alert, number of oblasts on
+      alert now
+    - the "attack wave": change in that number over the last 15/30 minutes
+    - hour and day of week
+  - Why this one:
+    - It's usually the strongest model on tabular time series.
+    - It's fast and easy to keep leakage-free.
+    - Feature importance shows which oblast warns which.
+  - Expected result: it should clearly beat climatology, because sNaive showed
+    the signal isn't in seasonality.
+
+  2. Multivariate Hawkes process (most interpretable)
+
+  - Each alert in oblast A temporarily raises the alert risk in oblast B. The
+    model learns how strong that effect is (α_AB) and how quickly it fades (β).
+  - The fitted α matrix is a propagation map of how alerts spread between
+    oblasts, which works well as a figure in your report.
+  - It's a natural fit for event data like alert start times.
+  - It's usually a bit weaker than LightGBM at prediction, but much easier to
+    explain.
+
+  3. Spatio-temporal graph neural network (STGCN / GConvGRU / Graph WaveNet)
+
+  - Nodes are oblasts and edges are borders plus the lift values from the
+    analysis. The input is the alert state tensor (time × oblast × features).
+  - This is the "advanced deep learning" option for the report.
+  - Downsides: with 24 nodes and rare events, it often doesn't beat LightGBM. It
+    also takes longer to train and tune.
+
+  4. Temporal Fusion Transformer / LSTM
+
+  - Multi-horizon deep forecasting with attention, so you can see which past
+    time steps it relies on.
+  - It can work, but it's heavy for binary rare-event data, and it doesn't use
+    the graph structure explicitly.
+
+  5. LightGBM plus Telegram text features (the optional part of the task)
+
+  - Add counts of keywords like "Шахед", "Ту-95", "пуски" or "курсом на
+    <oblast>" from posts published before t.
+  - This is the biggest potential improvement, because monitoring channels often
+    report launches before the official alert.
+
+  Suggested combination
+
+  1. LightGBM (spatial) as the main model, with an ablation that compares own
+     history only against own history plus neighbours.
+  2. Hawkes for interpretation and the propagation map.
+  3. If time allows, LightGBM plus Telegram to cover the optional part.
+
+  That's enough complexity for a strong project. Skip the GNN unless you have
+  time left, because it's a lot of extra work for an uncertain gain.
+
+  Should I build the LightGBM notebook next?
+
+❯ <ide_opened_file>The user opened the file
+  /Users/alona/Documents/KSE/agentic/PLAN.md in the IDE. This may or may not be
+  related to the current task.</ide_opened_file>
+
+❯ okay stik to the plan and build the prototype
+
+⏺ I'll follow week 1–2 of the plan: src/data.py, src/features.py, a leakage
+  test, and notebook 03 with logistic regression and LightGBM, comparing own
+  history only against own history plus spatial features. First I'll install the
+  dependencies.
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ LightGBM imports fine. Now the modules:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ All 3 leakage tests pass. Now notebook 03:
+
+  Read 1 file, ran 2 shell commands (ctrl+o to expand)
+
+⏺ I've built the prototype for weeks 1–2 of the plan. Everything runs in .venv.
+
+  New files:
+  - src/data.py downloads and cleans the data and builds the 5-minute grid (the
+    logic from notebook 01, as a module).
+  - src/features.py builds the features and targets. A row for time t only uses
+    data up to t. The neighbour graph (lift) is computed from training data
+    only.
+  - tests/test_leakage.py has 3 tests, and all 3 pass: features don't change
+    when future data is removed, lift doesn't depend on data after training, and
+    the target only looks at the future.
+  - 03_models_lightgbm.ipynb compares climatology, sNaive, logistic regression
+    on own history, LightGBM on own history, and LightGBM with spatial features.
+    Training uses the last 12 months, validation is 9 July – 8 August, and test
+    is 8 August – 7 September 2026.
+
+  Test results (PR-AUC, all oblasts):
+
+  ┌──────────────────┬────────┬────────┬────────┐
+  │      Model       │ 15 min │ 30 min │ 60 min │
+  ├──────────────────┼────────┼────────┼────────┤
+  │ Climatology      │ 0.060  │ 0.118  │ 0.223  │
+  ├──────────────────┼────────┼────────┼────────┤
+  │ sNaive-mean      │ 0.043  │ 0.098  │ 0.211  │
+  ├──────────────────┼────────┼────────┼────────┤
+  │ LogReg-own       │ 0.193  │ 0.295  │ 0.418  │
+  ├──────────────────┼────────┼────────┼────────┤
+  │ LightGBM-own     │ 0.198  │ 0.302  │ 0.416  │
+  ├──────────────────┼────────┼────────┼────────┤
+  │ LightGBM-spatial │ 0.209  │ 0.312  │ 0.433  │
+  └──────────────────┴────────┴────────┴────────┘
+
+  Main findings:
+  1. Models that use the oblast's own recent history are about 3× better than
+     seasonal baselines. The useful signal is recent activity, not time of day
+     or week.
+  2. Spatial features improve 17 of 21 oblasts (30-minute horizon), and the
+     largest gains are in rear oblasts:
+     - Kyiv City: 0.17 → 0.33 (almost double)
+     - Ternopil: +0.10
+     - Cherkasy: +0.10
+     - Volyn: +0.09
+  3. The pooled rear-oblast numbers don't show this well. The gain is
+     significant at 15 minutes (+0.016, confidence interval excludes 0). It's
+     not significant at 30 minutes. At 60 minutes, pooled PR-AUC is slightly
+     worse (−0.017), even though most individual oblasts improve. The pooled
+     metric also depends on ranking predictions across different oblasts, and
+     the spatial model is less consistent there. I'd report the per-oblast
+     average as the main metric.
+  4. The early-warning metric is weak so far. At the precision ≈ 0.5 threshold,
+     the spatial model warned before only 20% of alerts, versus 23% for the
+     own-history model. The threshold needs tuning per oblast.
+
+  Before the next stage, I'd suggest:
+  - making the per-oblast average PR-AUC the main metric
+  - tuning the early-warning threshold per oblast
+
+  After that comes the Hawkes model from the plan, which gives the propagation
+  map. Should I go ahead with those?
+
+❯ okaywhich improvment and where can improve the score
+
+⏺ These are the improvements I'd expect to help most, ordered by expected gain
+  per hour of work.
+
+  1. Fix the evaluation first (quick, and it changes the conclusions)
+
+  - Per-oblast average PR-AUC as the main metric. The pooled score mixes ranking
+    across oblasts, which is why the spatial model looked worse at 60 minutes.
+  - Per-oblast or per-group probability calibration (isotonic regression fitted
+    on validation). This also improves the pooled score and Brier score.
+  - Per-oblast early-warning thresholds, fitted on validation. That should raise
+    the 20% warning rate.
+
+  2. Better spatial features (largest expected gain for rear oblasts)
+
+  The analysis shows attacks move from east to west in waves, but right now the
+  model only sees "who is on alert".
+  - Wave direction: the number of oblasts on alert in each region (east, south,
+    centre, west) and how it changed over the last 15/30/60 minutes. A growing
+    centre count with an empty west means the wave is heading west.
+  - Geographic distance and border adjacency, alongside lift. Lift is noisy for
+    rare oblasts like Ternopil and Volyn.
+  - Raion and hromada level detail: an alert in the raion bordering Kyiv is a
+    much stronger signal than an alert anywhere in Kyivska oblast. You have this
+    data and currently merge it away.
+  - Attack-type proxies from alert shape:
+    - many oblasts starting within 5 minutes points to missiles or ballistics
+    - a slow chain of starts points to Shahed drones
+
+  3. Training setup
+
+  - Separate models (or weights) for rear and frontline oblasts. Frontline
+    oblasts dominate the training data but behave differently.
+  - Weight recent data more. Tactics change; you could compare 6 months against
+    12 months of training data.
+  - Hyperparameter tuning with Optuna on walk-forward folds, not just one
+    validation month.
+  - Predict all horizons together, or add horizon as a feature. The 60-minute
+    model currently overfits more.
+  - Train on every 5-minute step instead of every 15 minutes. That gives 3× more
+    training rows.
+
+  4. A different kind of model
+
+  - Hawkes process: its intensity could be added as a LightGBM feature. That's
+    often a strong combination.
+  - Ensemble of LightGBM-own and LightGBM-spatial per oblast, since 4 oblasts
+    were better without spatial features.
+
+  5. External information (biggest potential gain, most work)
+
+  - Telegram monitoring channels: posts like "Шахеди курсом на Житомир" or
+    "пуски Ту-95" come 10–60 minutes before the official alert. This is the only
+    information that is truly ahead of the alert history, so it could improve
+    the 30–60 minute horizons a lot.
+  - Weather (wind, clouds) for drone nights, and days since the last mass
+    attack, since mass attacks come in cycles.
+
+  ---
+
+  My recommendation for next steps:
+  1. Do #1 (about an hour), so we measure correctly.
+  2. Do the wave-direction features and raion-level features from #2. That's the
+     clearest gain for rear oblasts like Kyiv.
+  3. Do Telegram (#5), which also covers the optional part of the task.
+
+  Should I start with #1 and #2?
+
+❯ Can we add some scraping from tg such telegram chanal with the detection of
+  the air bomb direction?
+
+⏺ Yes. This is the optional text part of the task, and guided air bomb (КАБ)
+  features would mostly help the frontline oblasts (Kharkiv, Sumy, Zaporizhzhia,
+  Dnipro), where alerts are hardest to predict from history. I'll write the
+  scraper and the message parser now. You'll need to run the scraper yourself,
+  because Telegram login needs your account.
+
+  Read 1 file, ran 1 shell command (ctrl+o to expand)
+
+⏺ I've built the Telegram part, and all 8 tests pass (3 leakage tests and 5 new
+  Telegram tests). I haven't scraped anything yet. That needs your Telegram
+  login and your choice of channels, as described below.
+
+  New files:
+  - src/telegram.py contains three parts:
+    - Scraper (Telethon): downloads messages from public channels into
+      data/telegram_raw.parquet. Later runs only fetch new messages.
+    - Parser: matches Ukrainian text to:
+      - weapon type: КАБ/air bombs (kab), Shaheds, missiles, ballistics,
+        aircraft (Ту-95, МіГ-31, tactical aviation)
+      - direction: phrases like "курсом на", "у напрямку", "в бік"
+      - oblast: 24 oblasts, using oblast names, main cities and frontline towns
+        (Харківщина, Бровари, Кривий Ріг, Нікополь…). It tells Kyiv City apart
+        from Kyivska oblast.
+    - Features for each 5-minute step and oblast: how many messages mentioned
+      the oblast in the last 15/60 minutes, in total and per weapon type (e.g.
+      "КАБ towards Kharkiv in the last 15 minutes"), plus how many messages per
+      weapon type across all oblasts.
+  - scrape_telegram.py runs the scraper from the command line.
+  - tests/test_telegram.py checks the parser and that there's no leakage.
+  - .env.example and .gitignore, so your keys and session file are never
+    committed.
+
+  How it prevents leakage:
+  - A message posted at 10:12 is only used for forecasts made at 10:15 or later.
+    A test checks this.
+  - Messages edited more than 5 minutes after posting are dropped. Monitoring
+    channels often add updates later, and the edited text would contain
+    information from the future.
+  - Forwarded posts are dropped, because their original time is unclear.
+
+  What you need to do:
+  1. Get an API ID and hash at https://my.telegram.org under "API development
+     tools".
+  2. Copy .env.example to .env and fill in TG_API_ID and TG_API_HASH.
+  3. Run this in your own terminal. It asks for your phone number and login code
+     once:
+  .venv/bin/python scrape_telegram.py --since 2025-06-01 kpszsu <channel2>
+  <channel3>
+     kpszsu is the Ukrainian Air Force's official channel. Use the same start
+     date as the training data so the features cover the whole period.
+
+  Which channels should I add? For КАБ direction, you need monitoring channels
+  that post short messages like "КАБ на Харківщину". I don't want to guess their
+  usernames. Please send me the ones you follow, or check that each one stays
+  factual and posts in real time.
+
+  Once telegram_raw.parquet exists, I'll add the features to notebook 03 and
+  compare LightGBM with and without Telegram. I'd expect the largest gain in
+  Kharkiv, Sumy and Zaporizhzhia, where КАБ alerts happen.
+
+❯ which telegram channal would be benefitial and the better source of trust
+
+⏺ Web Search("Telegram канали моніторингу КАБ шахеди ракети напрямок надійні
+            список")
+  ⎿  Did 2 searches in 11s
+
+⏺ Web Search("Telegram channel Ukraine air raid monitoring drones missiles
+            real-time tracking channels list kpszsu")
+  ⎿  Did 1 search in 7s
+
+⏺ There isn't one channel that is both the most trusted and the most useful. The
+  official channels are reliable but post late, and the monitoring channels
+  post early but aren't verified. The best setup is one official channel plus
+  2–3 monitoring channels, and the model can learn how much to trust each one.
+
+  Recommended channels by role
+
+  Role: Official air threat reports
+  Channel: Ukrainian Air Force channel (I believe the handle is @kpszsu, but I
+  couldn't confirm it, so check on the Air Force's own website)
+  Trust: ⭐⭐⭐ official
+  Useful for the model?: Yes. It posts threat types and directions ("БпЛА курсом
+
+  на…", "загроза балістики"), often before the alert reaches the target oblast.
+  ────────────────────────────────────────
+  Role: Official alert feed
+  Channel: @air_alert_ua
+  Trust: ⭐⭐⭐ official
+  Useful for the model?: No. It posts the same alerts that are already in our
+  dataset, so it adds no early information.
+  ────────────────────────────────────────
+  Role: Monitoring: missiles and Shaheds
+  Channel: @deraketaua («Где Ракета?»)
+  Trust: ⭐⭐ unofficial, popular
+  Useful for the model?: Yes, for direction of missiles and drones
+  ────────────────────────────────────────
+  Role: Monitoring: aviation and КАБ
+  Channel: @war_monitor («Monitor»), 250k+ subscribers
+  Trust: ⭐⭐ unofficial, long-running
+  Useful for the model?: Yes, the best fit for КАБ and tactical aviation:
+  take-offs, launches, directions
+  ────────────────────────────────────────
+  Role: Regional
+  Channel: Oblast administration channels (Kharkiv, Sumy, Zaporizhzhia, Dnipro)
+  Trust: ⭐⭐⭐ official
+  Useful for the model?: Useful for КАБ in frontline oblasts, but they mostly
+  report after the fact
+
+  The Air Force has said that monitoring channels' reports of threat types are
+  mostly accurate. Analysts have also found that some channels exaggerate alerts
+  to gain followers, so channel choice matters.
+
+  How to choose and check a channel
+
+  1. It posts short, regular messages, like "КАБ на Харківщину" or "2 БпЛА
+     курсом на Житомир". Long commentary channels are hard to parse.
+  2. It has posted continuously since at least mid-2025, so it covers the
+     training period.
+  3. It doesn't edit messages heavily. The cleaning step drops messages edited
+     more than 5 minutes after posting. If a channel edits most of its posts,
+     you'll lose most of its data.
+  4. Test it on the data:
+     - Lead time: how many minutes before the official alert does it mention
+       that oblast?
+     - Precision: what share of its mentions are followed by an alert?
+
+     I can add both checks to the notebook. They also give you a strong result
+     for the report: which source warns earliest and which is most reliable.
+
+  My suggestion
+
+  Scrape the Air Force channel + @war_monitor + @deraketaua. Keep channel as a
+  feature dimension, and compare the gain from official sources only against
+  official plus monitoring channels.
+
+  Two cautions:
+  - These handles come from popular guides and news articles, which aren't
+    always accurate. Open each channel and check it before scraping.
+  - Channels that publish real-time missile positions have been criticised by
+    the Air Force. Your project only uses past messages to predict alerts, so it
+    doesn't add to that risk. Still, it's worth a sentence in the ethics part
+    of your report.
+
+  Sources:
+  - netfreedom.org.ua — Де ракета в Телеграм: гід 2026
+    (https://netfreedom.org.ua/de-raketa-v-telehram-povnyi-hid-z-monitorynhu-pov
+    itrianykh-zahroz-u-2026-rotsi/)
+  - netfreedom.org.ua — Карта тривог телеграм (https://netfreedom.org.ua/karta-t
+    ryvog-telegram-povnyj-gid-po-kanalah-mapah-ta-spovishhennyah/)
+  - LIGA.net — Повітряні сили: дані моніторингових пабликів здебільшого правдиві
+    (https://news.liga.net/politics/news/vozdushnye-sily-dannye-monitoringovyh-
+    pablikov-o-vidah-ugroz-v-osnovnom-pravdivye)
+  - Ukrainska Pravda — Air Force on Telegram channels tracking missiles
+    (https://pravda.com.ua/eng/news/2023/03/22/7394545)
+  - Kyiv Post — Air Force addresses rumors of Telegram "ban"
+    (https://www.kyivpost.com/amp/post/14817)
+  - Asharq Al-Awsat (AFP) — The Ukrainian social media channels tracking Russian
+    missiles (https://english.aawsat.com/node/5307591)
+  - Detector Media — How Telegram channels speculate on air raid alerts
+    (https://disinfo.detector.media/en/post/how-ukrainian-telegram-channels-spec
+    ulate-on-the-subject-of-air-raid-alert)
+
+❯ add kpszsu to scrape information
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I've made kpszsu the default channel in scrape_telegram.py, so every run
+  scrapes it. Any channels you list on the command line are added to it. I
+  haven't scraped anything yet because there's no .env file with your Telegram
+  API keys.
+
+  To run it:
+
+  1. Get your API ID and hash at https://my.telegram.org under "API development
+     tools".
+  2. Create .env in the project folder:
+  TG_API_ID=1234567
+  TG_API_HASH=your_hash_here
+  3. Run this in your terminal. The first time, it asks for your phone number
+     and the login code Telegram sends you:
+  .venv/bin/python scrape_telegram.py --since 2025-06-01
+     To add more channels later:
+  .venv/bin/python scrape_telegram.py --since 2025-06-01 war_monitor deraketaua
+
+  It saves messages to data/telegram_raw.parquet. Later runs only download new
+  messages.
+
+  When it's done, tell me. I'll first check that kpszsu is the real Air Force
+  channel by looking at the scraped posts, then see how many messages survive
+  the edit filter and how often each oblast and weapon type is mentioned. After
+  that I'll add the Telegram features to the LightGBM comparison.
+
+❯ okay wha tis the bench mark now?
+
+⏺ Here's where the results stand now. All numbers are on the test period (8
+  August – 7 September 2026), with no leakage, and come from
+  03_models_lightgbm.ipynb. Telegram features aren't included yet.
+
+  PR-AUC, all 24 oblasts
+
+  ┌─────────────────────────────┬────────┬────────┬────────┐
+  │            Model            │ 15 min │ 30 min │ 60 min │
+  ├─────────────────────────────┼────────┼────────┼────────┤
+  │ Random (base rate)          │ ≈0.03  │ ≈0.06  │ ≈0.11  │
+  ├─────────────────────────────┼────────┼────────┼────────┤
+  │ sNaive-mean 7×1d            │ 0.043  │ 0.098  │ 0.211  │
+  ├─────────────────────────────┼────────┼────────┼────────┤
+  │ Climatology (oblast × hour) │ 0.060  │ 0.118  │ 0.223  │
+  ├─────────────────────────────┼────────┼────────┼────────┤
+  │ LogReg-own                  │ 0.193  │ 0.295  │ 0.418  │
+  ├─────────────────────────────┼────────┼────────┼────────┤
+  │ LightGBM-own                │ 0.198  │ 0.302  │ 0.416  │
+  ├─────────────────────────────┼────────┼────────┼────────┤
+  │ LightGBM-spatial (best)     │ 0.209  │ 0.312  │ 0.433  │
+  └─────────────────────────────┴────────┴────────┴────────┘
+
+  By group (30 minutes)
+
+  ┌──────────────────┬───────┬───────────┐
+  │                  │ Rear  │ Frontline │
+  ├──────────────────┼───────┼───────────┤
+  │ Climatology      │ 0.144 │ 0.116     │
+  ├──────────────────┼───────┼───────────┤
+  │ LightGBM-own     │ 0.235 │ 0.370     │
+  ├──────────────────┼───────┼───────────┤
+  │ LightGBM-spatial │ 0.240 │ 0.375     │
+  └──────────────────┴───────┴───────────┘
+
+  ROC-AUC for rear oblasts is 0.88, against 0.81 for climatology.
+
+  What the benchmark means
+
+  - The reference baselines are sNaive and climatology. The best model is about
+    2.6× better than climatology at 30 minutes.
+  - The benchmark to beat next is LightGBM-spatial: PR-AUC 0.312 at 30 minutes
+    (all oblasts).
+  - Spatial features give the largest gains in rear oblasts: Kyiv City 0.17 →
+    0.33, Cherkasy +0.10, Ternopil +0.10.
+  - Weak points:
+    - In the pooled rear-oblast score, the spatial gain over own history isn't
+      significant at 30 minutes, and at 60 minutes the spatial model scores
+      slightly lower.
+    - Early warning catches only about 20% of alerts with a median lead of 35
+      minutes.
+
+  Next steps:
+  1. Make the per-oblast average PR-AUC the main metric and tune thresholds per
+     oblast.
+  2. Add the wave-direction and raion-level features.
+  3. Add the Telegram features (kpszsu) once you've scraped the data. They
+     should be compared against this 0.312 benchmark.
+
+❯ add improvment which you suggested earlier
+
+⏺ I'll add the improvements from points 1–3 of my earlier list:
+
+  - Evaluation: per-oblast average PR-AUC as the main metric, isotonic
+    calibration, and early-warning thresholds per oblast.
+  - Features:
+    - attack-wave direction: alerts by macro-region and how they're changing
+    - border adjacency between oblasts
+    - raion-level intensity: how many raions or hromadas in the oblast are on
+      alert
+    - burst-start signals that hint at the attack type
+  - Training: every 5 minutes instead of every 15, with more weight on recent
+    data.
+
+  The Hawkes model and Telegram stay for later.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ All 9 tests pass, including a leakage test for the new features. Now notebook
+  04 with the comparison:
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Notebook 04 is running in the background. It trains 12 LightGBM models on
+  about 2.5M rows, so it'll take a while. I'll report the results when it
+  finishes.
+
+⏺ Background command "Generate and execute improved models notebook" completed
+(exit code 0)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ It failed on the recency weights: they came back as a pandas Index instead of
+  an array. Fixing that and running it again:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ It's running again in the background. I'll share the new benchmark when it
+  finishes.
+
+⏺ Background command "Fix weight type and re-run notebook 04" completed (exit
+code 0)
+
+⏺ API Error: Can't reach the API server — check your internet or DNS
+  (ENOTFOUND)
+
+❯ <ide_opened_file>The user opened the file
+  /Users/alona/Documents/KSE/agentic/PLAN.md in the IDE. This may or may not be
+  related to the current task.</ide_opened_file>
+
+❯ can you check now?
+
+  Ran 1 shell command (ctrl+o to expand)
+⏺ Notebook 04 ran successfully, and the improvements work.
+  04_improved_models.ipynb is executed and saved, and all 9 tests (including
+  leakage) pass.
+
+  New benchmark: mean per-oblast PR-AUC, test period
+
+  ┌────────────────────────────────────┬────────┬────────┬────────┐
+  │               Model                │ 15 min │ 30 min │ 60 min │
+  ├────────────────────────────────────┼────────┼────────┼────────┤
+  │ Climatology                        │ 0.041  │ 0.082  │ 0.155  │
+  ├────────────────────────────────────┼────────┼────────┼────────┤
+  │ LightGBM-own                       │ 0.132  │ 0.201  │ 0.280  │
+  ├────────────────────────────────────┼────────┼────────┼────────┤
+  │ LightGBM-spatial v1 (old best)     │ 0.165  │ 0.239  │ 0.321  │
+  ├────────────────────────────────────┼────────┼────────┼────────┤
+  │ LightGBM-spatial v2 (new features) │ 0.184  │ 0.255  │ 0.332  │
+  ├────────────────────────────────────┼────────┼────────┼────────┤
+  │ v2 + recency weights (new best)    │ 0.188  │ 0.255  │ 0.335  │
+  └────────────────────────────────────┴────────┴────────┴────────┘
+
+  For rear oblasts, the gain is biggest: 0.174 → 0.196 at 30 minutes, and 0.115
+  → 0.140 at 15 minutes (+22%).
+
+  The improvements are statistically significant at every horizon (block
+  bootstrap by day):
+  - v2 vs v1: +0.025 / +0.018 / +0.012 at 15 / 30 / 60 minutes. None of the
+    confidence intervals include 0.
+  - v2 vs own history: about +0.06 at all horizons.
+
+  What helped
+
+  - Largest per-oblast gains (v2 vs v1):
+    - Kyivska +0.055
+    - Chernivtsi +0.054
+    - Dnipro +0.040
+    - Volyn +0.035
+    - Kyiv City 0.32 → 0.355
+  - Feature importance by group:
+    - own history 35%
+    - oblast ID 23%
+    - old spatial features 16%
+    - new adjacency features 9%, raion-level 6%, wave direction 5%
+  - Training every 5 minutes and recency weights gave small gains: +0.004 at 15
+    minutes, about the same at 30–60 minutes.
+  - The earlier problem in the pooled rear score is gone. The spatial model now
+    beats own history at 15 minutes (0.169 vs 0.133) and 30 minutes (0.261 vs
+    0.235), and roughly matches it at 60 minutes (0.390 vs 0.386).
+
+  What didn't help
+
+  - Isotonic calibration improved the Brier score (0.0481 → 0.0477) but lowered
+    PR-AUC by about 0.008. I'd use it only when you need real probabilities, not
+    as the main model.
+  - Per-oblast thresholds made early warning worse: 46% vs 58% of alerts warned,
+    for v2 with a global threshold. In many rear oblasts, a precision of 0.5 is
+    impossible to reach, so those oblasts never raise a warning. Use a global
+    threshold. With it, v2 warns before 58% of alerts (45% in rear oblasts) with
+    a median lead of 40 minutes, up from 51% for own history.
+  - Kharkiv, Chernihiv and Kherson dropped slightly (about −0.01 to −0.02).
+    That's probably noise from the frontline oblasts.
+
+  The benchmark to beat is now 0.255 mean per-oblast PR-AUC at 30 minutes (0.196
+  for rear oblasts). The pooled number is 0.322.
+
+  Next in the plan are the Hawkes model for the propagation map, and the
+  Telegram features once you've scraped kpszsu. Should I update PLAN.md with
+  these results?
+
+❯ make a deep research what can help and check each fact and provide me a link
+  where you bring this information
+
+⏺ Skill(anthropic-skills:deep-research)
+  ⎿  Successfully loaded skill
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ 4 agents finished (ctrl+o to expand)
+   ├ Prior work Ukraine alerts · 18 tool uses · 54.4k tokens
+   │ ⎿  Done
+   ├ Spatio-temporal event methods · 20 tool uses · 58.6k tokens
+   │ ⎿  Done
+   ├ External leading data sources · 19 tool uses · 60.5k tokens
+   │ ⎿  Done
+   └ Imbalance, evaluation, ethics · 20 tool uses · 53.9k tokens
+     ⎿  Done
+
+› Message from general-purpose
+  I've saved the notes to
+  /Users/alona/Documents/KSE/agentic/research_notes/Improving air raid alert
+  forecasts/methods.md. They follow the researcher.md structure: six key
+  questions, each with a Takeaway, Cited Findings (every one has a URL),
+  Inferences and Gaps.
+
+  Several numbers come only from search snippets or news pages, not from reading
+  the papers themselves. These are the 1.4–2.2x and 7.4% figures from the
+  policing trial, the Porter & White results, the earthquake-model comparisons
+  and the LSTM-Hawkes error reductions. Check them in the original papers before
+  relying on them.
+
+  **Main findings:**
+  - **Hawkes models (crime and terrorism):**
+    - Mohler et al. (JASA 2011) modelled crime as a background rate plus a
+  self-exciting part, the same structure as earthquake-aftershock (ETAS) models.
+    - In Mohler et al.'s 2015 randomised field trials (JASA), the ETAS model
+  predicted 1.4–2.2x as much crime as human analysts. Patrols guided by it cut
+  crime by 7.4% per unit of patrol time.
+    - Porter & White (Annals of Applied Statistics 2012), on daily attacks in
+  Indonesia, split the problem into "is there any attack" and "how many". That
+  is a close match to rare alert onsets.
+    - I found no peer-reviewed head-to-head comparison of Hawkes models against
+  gradient boosting.
+  - **tick on Python 3.12:** unconfirmed. The README only says "Python 3.5 or
+  newer", automated testing is switched off, and 78 issues are open. I couldn't
+  load the PyPI page, so I couldn't check for 3.12 wheels. I didn't check
+  hawkeslib's status. Test the install in a 3.12 environment; if it fails,
+  writing your own exponential-kernel Hawkes in NumPy or PyTorch is a short job.
+  - **Neural point-process models:** EasyTPP (ICLR 2024) is the standard library
+  and benchmark. An independent study across 15 real datasets (Bosser & Ben
+  Taieb, TMLR 2023) found that earlier papers compared models in inconsistent
+  setups. It also found the neural models' event-type probabilities are poorly
+  calibrated. Neither source shows them consistently beating classic Hawkes. I
+  didn't get EasyTPP's results tables.
+  - **Graph neural networks:** their advantage is mostly reported on dense
+  traffic benchmarks. SimST (2023) matched them with a simpler model, and
+  gradient boosting was competitive in the Traffic4cast 2022 challenge. I found
+  no evidence that they beat gradient boosting on a small graph with rare binary
+  targets. With 24 regions, LightGBM's neighbour-lag features already encode
+  the graph, so a GNN fits best as one member of an ensemble.
+  - **Conflict forecasting systems:**
+    - ViEWS (Uppsala/PRIO) is built as an ensemble of models, with some models
+  specialised for near horizons and others for distant ones.
+    - In ViEWS's escalation competition, a simple ensemble beat the average
+  individual model, and the 2023/24 challenge moved to probabilistic forecasts.
+    - Mueller & Rauh (JEEA 2022) show that onsets in previously calm places are
+  the hardest case.
+    - ACLED CAST forecasts 4-week event counts by province. Its own reports show
+  the biggest misses during sudden escalations (+24% in October 2023). I found
+  no independent evaluation of CAST.
+    - The lessons for you: evaluate on true future windows, score onsets after
+  quiet periods separately from continuations, and report calibrated
+  probabilities.
+  - **Earthquake analogy:** machine-learning models roughly match or slightly
+  beat ETAS and run far faster. ETAS is described as "brittle" to fit, which is
+  a warning for fitting Hawkes on your alert data. A hybrid preprint (CL-ETAS)
+  reports ETAS undercounting events in three Southern California aftershock
+  sequences.
+  - **Hawkes intensity as a LightGBM feature:** I found no published study doing
+  exactly this. Related hybrids exist: Boost-R and an LSTM-Hawkes model that
+  reported 27–84% lower error. Suggested recipe:
+    - Fit the Hawkes model on the training window only.
+    - At each prediction time, compute the intensity using only earlier events,
+  then turn it into an onset probability for the 15/30/60-min horizon as 1 −
+  exp(−∫λ).
+    - Add that to LightGBM's features.
+    - A cheaper version is past alerts per region counted with exponential decay
+  at several rates; these are the quantities a Hawkes model is built from.
+    - Either way, it needs validating on your data.
+
+› Message from general-purpose
+  I found almost no published work that forecasts alert starts, so a mean
+  per-oblast PR-AUC of 0.255 at 30 min has nothing directly comparable to
+  benchmark against. Coverage is incomplete: about 13 tool calls, Kaggle pages
+  didn't render, and Google Scholar, SSRN, ACLED, texty.org.ua and the
+  ukrainealarm API weren't reached.
+
+  Notes are saved at /Users/alona/Documents/KSE/agentic/research_notes/Improving
+  air raid alert forecasts/prior_work.md, with a source URL on every fact.
+
+  **Papers**
+  - **Pavlyshenko & Pavlyshenko, arXiv 2411.14625 (21 Nov 2024)** is the only
+  directly relevant ML paper I found.
+    - Data: Vadym Klymenko's alert datasets, at 1-minute resolution from Mar
+  2022 to Nov 2024.
+    - Model: a separate Random Forest (500 trees) per region, for only 4 oblasts
+  (Lviv, Vinnytsia, Kyiv, Kharkiv).
+    - Validation: train/test split by time at 2024-07-01.
+    - Target: whether an alert is active in the next 5 min (15 min in an
+  appendix). An ongoing alert counts as positive, so this predicts alert state,
+  not starts.
+    - Results: accuracy and ROC-AUC appear only in figures; the text gives no
+  numbers.
+    - Findings: neighbouring oblasts' alert status matters most,
+  time-of-day/week/month features matter, and patterns drift over time.
+    - The authors also ran a Telegram channel that predicted alert starts from
+  monitoring channels using NLP plus rules.
+  - **Van Dijcke, Wright & Polyak, PNAS 2023** studies how people respond to
+  alerts, not forecasting. It found sheltering fades over time ("alert fatigue")
+  and estimates 35–45% of civilian casualties were avoided.
+  - **CSIS Futures Lab (podcast, 9 May 2025)** reports that strike volume is not
+  statistically tied to frontline activity. It relies on Petro Ivaniuk's Kaggle
+  missile data, which CSIS says matches Air Force figures (11,466 missiles from
+  Sep 2022 to Sep 2024).
+  - **Other items:**
+    - A National Defence University of Ukraine article uses alert statistics to
+  plan teaching; it is not an ML benchmark.
+    - A LinkedIn profile claims a production LightGBM model forecasting 24 hours
+  ahead for 25 regions. I couldn't verify it.
+
+  **Datasets and APIs**
+  - **Vadimkin/ukrainian-air-raid-sirens-dataset:** MIT licence, updated daily,
+  includes both official alerts and volunteer eTryvoga alerts. I couldn't read
+  its field definitions or whether it covers raions.
+  - **alerts.in.ua API:**
+    - Gives current status by oblast, raion and hromada, including "partial"
+  when only some districts are under alert.
+    - Tags threat types (MiG-31K, strategic aviation, ballistic, cruise, drones,
+  guided bombs).
+    - Its history endpoint only goes back one month, and requests are limited to
+  about 12 per minute.
+  - **Kaggle "Massive Missile Attacks on Ukraine" (piterfm / Petro Ivaniuk):**
+  built from Air Force daily reports. The page exists, but I couldn't read its
+  columns.
+  - **Other attack datasets:**
+    - MotherDuck "Skyfall" dive covering Sep 2022 – Jun 2026.
+    - DiXi Group / Energy Map strikes on infrastructure (Sep 2022 – Aug 2024;
+  weapon type, counts launched and shot down).
+    - Airwars Shahed map (Sep 2022 – Aug 2023 only).
+    - A CSIS figure (via UNN) of over 44,000 Shaheds launched in the first 10
+  months of 2025.
+
+  **What this means for the project**
+  - Pavlyshenko's numbers aren't comparable to ours: an alert already under way
+  stays positive, which inflates the score.
+  - Air Force reports come out once per night or day and are published the next
+  morning. They can feed daily or regime-level features, but only if lagged to
+  the publication time to avoid leakage.
+  - The alerts.in.ua threat tags look like useful near-real-time warning
+  signals, but we would have to start logging them ourselves now, given the
+  one-month history.
+
+  **Not found**
+  - No student, KSE or hackathon project on this.
+  - No public notebook or paper reporting PR-AUC for alert starts.
+  - Nothing on texty.org.ua, and no official documentation of the 2023 switch to
+  declaring alerts by raion.
+
+› Message from general-purpose
+  The research notes are written and saved. Every claim cites a URL, and
+  anything I couldn't check is listed under Gaps. File:
+  /Users/alona/Documents/KSE/agentic/research_notes/Improving air raid alert
+  forecasts/evaluation_ethics.md
+
+  Findings by question:
+
+  1. **Class imbalance.** The LightGBM docs say `is_unbalance` and
+  `scale_pos_weight` "should increase the overall performance metric" but give
+  "poor estimates of the individual class probabilities". Undersampling has the
+  same effect: it leaves the ranking intact but biases calibration (Dal Pozzolo
+  et al. 2015, which gives an analytical correction). So if we re-weight or
+  undersample, we should recalibrate on a later time block before publishing
+  probabilities.
+
+  2. **Metrics.**
+     - Saito & Rehmsmeier 2015 show that ROC plots can be deceptive on
+  imbalanced data and PR curves are more informative.
+     - scikit-learn notes that Brier score and log loss mix calibration with
+  resolution, so a lower Brier score does not by itself mean better calibration.
+  Use the decomposition or reliability diagrams.
+     - Platt (sigmoid) calibration is better for small samples. Isotonic is as
+  good or better only above about 1000 samples (Niculescu-Mizil & Caruana 2005,
+  as cited by scikit-learn). For oblasts with a 0.3% base rate, that points to a
+  pooled or sigmoid calibrator rather than per-oblast isotonic.
+     - Report both macro and pooled averages, with metrics normalized by base
+  rate.
+
+  3. **Cross-validation and significance.**
+     - fpp3 describes the rolling forecasting origin, and Bergmeir & Benítez
+  2012 recommend blocked CV. Both argue for several walk-forward folds rather
+  than a single test month.
+     - Diebold-Mariano (1995) with the Harvey-Leybourne-Newbold (1997)
+  small-sample correction is implemented in R `forecast::dm.test` and
+  statsmodels.
+     - The standard DM test loses reliability when the loss difference varies
+  over time (Harvey, Leybourne & Zu), which applies under drift.
+
+  4. **Concept drift.** Gama et al. 2014 (ACM Computing Surveys) is the standard
+  survey. A concrete drift risk: in August 2026 the Air Force cut back its
+  ballistic-missile reporting, so features derived from those reports can change
+  without warning.
+
+  5. **Early-warning metrics.** Earthquake early-warning evaluations score
+  alerts as matched, missed, false or late, and measure lead time.
+     - ShakeAlert 2.0 had false/missed rates of 8%/16% for M5+ events.
+     - Minson et al. argue that accepting more false alerts gives the best
+  overall performance.
+
+  6. **Legal and ethical.**
+     - **Criminal law:** Ukraine's Criminal Code Art. 114-2 (Law 2160-IX, in
+  force 27 March 2022) criminalizes unauthorized dissemination of information on
+  weapons and troop movements under martial law.
+     - **Air Force warning:** on 22 March 2023 spokesman Ihnat warned that
+  channels posting real-time missile and drone tracks could face criminal cases.
+  Two days later he clarified that established channels were not banned and
+  that the concern was radar screenshots revealing air-defense locations.
+     - **Telegram API terms:** §1.5 prohibits "using, accessing or aggregating
+  data obtained from the Telegram platform to train" AI/ML models. This is the
+  most direct compliance risk if the training data comes from scraped channels.
+
+  Gaps:
+  - zakon.rada.gov.ua and the Ukrainska Pravda article both returned 403, so the
+  exact wording and penalties of Art. 114-2 are taken from secondary sources.
+  - I found no primary sources for López de Prado's purging/embargo, block
+  bootstrap, the Murphy Brier decomposition, focal loss in gradient boosting, or
+  weather-warning POD/FAR definitions.
+  - I found no official Ukrainian guidance on publishing probabilistic alert
+  forecasts.
+
+› Message from general-purpose
+  I've saved the notes, with a source URL on each claim, to
+  /Users/alona/Documents/KSE/agentic/research_notes/Improving air raid alert
+  forecasts/external_data.md. Two items in the brief are not checked yet. First,
+  the handle t.me/kpszsu is the commonly cited Air Force channel, but I didn't
+  confirm it from an official page. Second, I found nothing on Black Sea ship
+  launches. Search results were mostly 2023–2025, so 2026 coverage is thin.
+
+  - **Air Force Telegram:** it posts two kinds of messages, and they need
+  different handling:
+    - **Morning summaries** give drones and missiles launched, shot down and
+  "lost", plus drone types and strike locations. They describe the night that
+  just ended, so join them to the next day or later. Use the post timestamp,
+  track edits, and expect later revisions.
+    - **Real-time threat posts:** a bomber takeoff post comes about 3–9 hours
+  before the expected launch. A MiG-31K takeoff triggers a nationwide alert
+  immediately, so it is part of the outcome, not a feature.
+  - **Monitoring channels:** they are informal and sometimes wrong. I found no
+  published measure of their accuracy or lead time. The Air Force once warned
+  them about legal liability, and some made their updates vaguer, so text from
+  them changes in character over time. The closest research is Pavlyshenko &
+  Pavlyshenko (arXiv:2411.14625, Nov 2024). It forecasts alert starts from
+  Telegram text and finds alerts in neighbouring regions and
+  time-of-day/week/month are strong predictors. It reports no accuracy or
+  lead-time numbers in the abstract.
+  - **Weather:** Ukrainian military intelligence says weather is one factor in
+  choosing attack dates. I found no quantitative study linking wind, cloud or
+  fog to attacks. Open-Meteo's archive API covers this:
+    - It has hourly cloud cover by layer, wind at 10 m and 100 m, gusts and
+  precipitation. It is free for non-commercial use.
+    - Its reanalysis data appears with a 5-day delay and is "observed" weather
+  nobody had at forecast time. That is a leakage risk, so use forecasts that
+  were issued before the cutoff instead.
+  - **Moon phase:** I found no evidence either way. It has no leakage risk, so
+  it is cheap to test.
+  - **Russian aircraft:** bomber flights sometimes turn back or only simulate
+  launches. There is no structured dataset of takeoffs; you would have to build
+  one by parsing Air Force posts.
+  - **NASA FIRMS:** fire data arrives about 3 hours after the satellite pass. It
+  needs a free key, limited to 5,000 requests per 10 minutes (that figure is
+  from a NASA forum reply, not the official docs). It mostly shows damage after
+  an attack, not a warning sign.
+  - **ACLED:** the Ukraine monitor updates weekly on Wednesdays and its records
+  get revised. It only works as a weekly, lagged feature.
+  - **ISW:** I couldn't verify what time its daily reports are published.
+  - **Shahed data:** the monthly Shahed analyses come from the Institute for
+  Science and International Security (isis-online.org), not CSIS. For example,
+  June 2026 averaged about 260 drones a day early in the month and about 151
+  later.
+  - **Mass-strike cycles:** CSIS (Jensen & Atalan, 9 Sep 2025) puts the average
+  gap between major salvos in 2025 at 8.2 days. The gap ranged from 2 to 38
+  days; the 38 was in August 2025, during negotiations. Ukrainian officials have
+  described it differently over time: weekly or every two weeks in 2025, and
+  3–4 weeks in 2023. "Days since the last mass strike", computed from the
+  next-day summaries, is a useful feature with no leakage. Validate it on
+  time-based splits because the pattern shifts between periods.
+
+⏺ Agent(Write final report)
+  ⎿  Done (5 tool uses · 62.8k tokens · 7m 28s)
+  (ctrl+o to expand)
+
+› Message from general-purpose
+  I've written the report: about 2,500 words built from the four research notes,
+  with every factual claim linked to a source, and a 12-item priority table at
+  the end.
+
+  Saved to: /Users/alona/Documents/KSE/agentic/reports/Improving air raid alert
+  forecasts.md
+
+  **Main findings**
+  - **No comparable benchmark exists.** The 0.255 PR-AUC for alert starts has
+  nothing published to compare against. The only close ML paper (Pavlyshenko &
+  Pavlyshenko, arXiv 2411.14625) predicts whether an alert is active, which is
+  easier than predicting a start. It also gives no numeric metrics in the text.
+  - **Planned methods have uneven evidence.**
+    - Hawkes processes have a strong record on crime and terrorism data, but no
+  published study feeds their output into LightGBM. Decayed counts of past alert
+  starts at several time scales are a cheap stand-in for Hawkes and probably
+  capture most of the gain.
+    - The `tick` Hawkes library looks poorly maintained, and its Python 3.12
+  support is unconfirmed.
+    - I found no evidence that GNNs beat gradient-boosted trees on a small graph
+  with rare events. The report recommends a GNN only as one member of an
+  ensemble.
+  - **The most defensible new data is the mass-strike cycle.** Major salvos came
+  about every 8.2 days in 2025, ranging from 2 to 38 days. Two kinds of feature
+  follow from this:
+    - "days since last mass strike" and launch totals from the Air Force morning
+  reports, joined by when each report was published, not the date of the
+  attack;
+    - live warnings that strategic bombers have taken off.
+  - **Two leakage traps:**
+    - A MiG-31K takeoff triggers the alert immediately, so it belongs to the
+  label, not the features.
+    - In August 2026, inside your test window, the Air Force stopped reporting
+  ballistic-missile numbers in its morning reports.
+  - **Evaluation needs changing.**
+    - Replace the single Aug–Sep test window with several rolling time-based
+  folds plus a gap between training and test data.
+    - Report PR-AUC relative to each oblast's base rate, plus Brier skill score
+  and log loss.
+    - Calibrate probabilities with a sigmoid method (LightGBM's imbalance
+  weights make probabilities unreliable).
+    - Add warning-system metrics: share of alert starts caught in time, median
+  lead time, and false alarms per oblast per week.
+  - **Legal risk blocks the Telegram plan.** Telegram's API terms (§1.5)
+  prohibit using its data to train ML models. Ukraine's Criminal Code Art. 114-2
+  makes it a crime to spread information on military and weapons movements
+  under martial law. The report puts Telegram features last in priority, blocked
+  until a legal review.
+
+  **Top priorities:** (1) rolling-fold evaluation with a train/test gap and the
+  new metrics; (2) decayed alert-start counts as a Hawkes stand-in; (3)
+  strike-cycle features; (4) calibration plus a test of LightGBM's class
+  weighting; (5) the warning-system metrics; (6) start logging alerts.in.ua
+  threat tags now, because it only keeps one month of history.
+
+  These claims are marked **[partial]** in the report:
+  - t.me/kpszsu is not confirmed as the official Air Force channel.
+  - The exact wording and penalties of Art. 114-2 could not be fetched from the
+  official site.
+  - ISW's publication time is unknown.
+  - The source for Pavlyshenko's Telegram alert channel is a search summary.
+  - The LinkedIn claim of a production LightGBM for 24-hour alert forecasts is
+  unverified.
+  - The USGS early-warning paper has inconsistent journal/DOI details.
+  - The López de Prado citation for the train/test gap was not checked.
+
+  Impact estimates in the priority table are my judgement, not measured results.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+⏺ The research is done: four parallel searches covered prior work, methods,
+  external data, and evaluation and ethics, then a writing step combined them.
+  The report is at reports/Improving air raid alert forecasts.md
+  (reports/Improving%20air%20raid%20alert%20forecasts.md), and every factual
+  claim in it has a source link. Claims that were only partly checked are marked
+  [partial], for example that t.me/kpszsu is the official Air Force channel,
+  and the exact wording of Ukraine's Criminal Code Art. 114-2.
+
+  What it found:
+  - No published work forecasts alert starts. The closest paper (arXiv
+    2411.14625 (https://arxiv.org/abs/2411.14625)) predicts whether an alert is
+    active for 4 oblasts, which is easier, and gives no numbers. So the 0.255
+    PR-AUC can't be compared with anything; it would be the first benchmark of
+    its kind.
+  - The Telegram plan conflicts with Telegram's rules. Telegram's API terms §1.5
+    (https://core.telegram.org/api/terms) prohibit using platform data to train
+    ML models. Our scraper with LightGBM would fall under that, so the report
+    blocks Telegram features until this is resolved. Discuss it with your
+    supervisor before running the scraper.
+  - The test period has a data change in it. In August 2026 the Air Force
+    stopped reporting ballistic missile counts in its morning summaries, so any
+    features built from those reports change in the middle of the test window.
+  - Hawkes models and graph neural networks:
+    - Hawkes processes work well on crime and terrorism data.
+    - The tick library looks poorly maintained, and it's unclear whether it
+      supports Python 3.12.
+    - I found no evidence that graph neural networks beat gradient boosting on
+      24 regions with rare events.
+
+  Top improvements by priority:
+  1. Evaluate on several time periods: at least 6 monthly walk-forward folds
+     with a gap between training and test data, instead of one test month.
+     Report PR-AUC relative to each oblast's base rate.
+  2. Exponentially decayed counts of past alert starts (own oblast, neighbours,
+     region, national) as a cheap stand-in for a Hawkes model.
+  3. Mass-attack cycle features: major attacks came about every 8.2 days in 2025
+     (CSIS (https://www.csis.org/)). "Days since the last mass attack" can be
+     built from the Air Force morning summaries, joined by publication time.
+  4. Sigmoid calibration and early-warning metrics: catch rate, lead time, and
+     false alarms per week.
+  5. Start logging alerts.in.ua threat tags now. They label threats as
+     ballistic, drones, КАБ and so on, but the API only keeps one month of
+     history.
+
+  One caution: the "expected impact" column in the report is the writer's
+  judgement, not a measured result. Some numbers came from search snippets
+  rather than the original papers, and the report says which ones.
+
+  Should I start with #1 and #2? Both are quick to add to the existing code and
+  don't involve the Telegram data.
+
+❯ дуеі ащ ше
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ lets do it
+
+⏺ I'll add the decayed alert-start counts to src/features.py, test them for
+  leakage, then build notebook 05 with six monthly walk-forward folds.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ All 10 tests pass, including the new decay-feature leakage test. Now the
+  walk-forward notebook:
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Notebook 05 is running in the background. It trains 6 folds × 3 horizons × 3
+  LightGBM models, so expect roughly 30–60 minutes.
+
+  What's done so far:
+  - Decayed alert-start counts in src/features.py (build_features_v3). They use
+    half-lives of 15 minutes, 1 hour, 6 hours and 24 hours, and cover the oblast
+    itself, its border neighbours, its macro-region and the whole country.
+    That's 16 new features, and the leakage test for them passes (10 of 10 tests
+    pass).
+  - Walk-forward evaluation in 05_rolling_cv_decay.ipynb:
+    - There are 6 monthly test folds, from about March to September 2026.
+    - Each fold trains on 365 days, uses the next 30 days for early stopping,
+      then tests on the month after. There's a 60-minute gap between each part
+      so targets can't overlap.
+    - The neighbour graph and the frontline/rear split are recalculated inside
+      each fold, from that fold's training data only.
+    - Hyperparameters are fixed and not tuned on any test fold.
+  - New metrics: mean per-oblast PR-AUC, PR-AUC relative to each oblast's base
+    rate, Brier skill score against climatology, and log loss. Results are shown
+    as mean ± standard deviation over folds, plus how many folds v3 wins
+    against v2.
+
+  I'll report the results when it finishes.
+
+⏺ Background command "Generate and run rolling-origin CV notebook" completed
+(exit code 0)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Notebook 05 ran successfully across all 6 folds. 05_rolling_cv_decay.ipynb is
+  executed and saved, and the results are in data/results_05_rolling.csv.
+
+  Result 1: the decayed counts (the Hawkes stand-in) didn't help
+
+  ┌──────────────────────────┬─────────────────┬─────────────┬─────────────┐
+  │    Comparison (mean      │     15 min      │   30 min    │   60 min    │
+  │    per-oblast PR-AUC)    │                 │             │             │
+  ├──────────────────────────┼─────────────────┼─────────────┼─────────────┤
+  │ v3 (+decay) − v2, all    │ +0.001 (won 3/6 │ −0.001 (won │ −0.003 (won │
+  │ oblasts                  │  folds)         │  1/6)       │  1/6)       │
+  ├──────────────────────────┼─────────────────┼─────────────┼─────────────┤
+  │ v3 (+decay) − v2, rear   │ +0.003 (won     │ 0.000 (won  │ −0.002 (won │
+  │                          │ 5/6)            │ 3/6)        │  2/6)       │
+  └──────────────────────────┴─────────────────┴─────────────┴─────────────┘
+
+  The model uses the decay features a lot: they account for 25% of feature
+  importance. But they mostly replace information it already had from rolling
+  counts and "minutes since the last alert", so the overall score doesn't
+  change. That's a useful finding for the report. It also suggests a full Hawkes
+  model will probably add little to prediction accuracy. Its value would mainly
+  be the propagation map. v2 remains the best model.
+
+  Result 2: an honest benchmark over 6 months (March–September 2026)
+
+  ┌──────────────────────────────────┬────────────┬────────────┬────────────┐
+  │ Mean per-oblast PR-AUC (mean ±   │   15 min   │   30 min   │   60 min   │
+  │          sd over folds)          │            │            │            │
+  ├──────────────────────────────────┼────────────┼────────────┼────────────┤
+  │ Climatology                      │ 0.034 ±    │ 0.069 ±    │ 0.130 ±    │
+  │                                  │ 0.005      │ 0.009      │ 0.017      │
+  ├──────────────────────────────────┼────────────┼────────────┼────────────┤
+  │ LightGBM-own                     │ 0.110 ±    │ 0.168 ±    │ 0.232 ±    │
+  │                                  │ 0.015      │ 0.022      │ 0.028      │
+  ├──────────────────────────────────┼────────────┼────────────┼────────────┤
+  │ LightGBM v2 (best)               │ 0.152 ±    │ 0.222 ±    │ 0.295 ±    │
+  │                                  │ 0.018      │ 0.020      │ 0.026      │
+  └──────────────────────────────────┴────────────┴────────────┴────────────┘
+
+  - The real benchmark is 0.222 ± 0.020 at 30 minutes, not 0.255. The single
+    August–September test month was one of the easier months. Averaging over 6
+    months gives a more reliable number.
+  - Spatial features beat own history in all 6 folds at every horizon for all
+    oblasts and for rear oblasts. For rear oblasts at 30 minutes, the gain is
+    +0.072 (0.075 → 0.147, about 2×). This is now a robust main result.
+  - For frontline oblasts the spatial gain is small: +0.012 to +0.019, winning 5
+    or 6 of 6 folds.
+  - Brier skill score against climatology is +0.11 at 30 minutes, which means
+    11% lower Brier score. Log loss is also better than climatology in every
+    case.
+  - PR-AUC relative to base rate is about 12× random at 30 minutes, but it
+    varies a lot between folds (±6.5). Very rare oblasts like Chernivtsi (base
+    rate 0.3%) produce extreme ratios, so use it as a supporting number, not the
+    headline.
+
+  What this means for the plan
+
+  - Use v2 as the final model and 6-fold walk-forward evaluation as the main way
+    to report results.
+  - Do the Hawkes model mainly for the interpretable propagation map, not for
+    accuracy.
+  - The next likely accuracy gains need new information, not more
+    transformations of the alert history:
+    - mass-attack cycle features from the Air Force morning summaries
+    - alerts.in.ua threat tags
+    - Telegram, if your supervisor confirms it's allowed under Telegram's terms
+
+  Should I update PLAN.md with these results and the revised next steps?
+
+❯ search for more improvment
+
+⏺ Skill(anthropic-skills:deep-research)
+  ⎿  Successfully loaded skill
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ 3 agents finished (ctrl+o to expand)
+   ├ Backfillable data sources · 20 tool uses · 55.2k tokens
+   │ ⎿  Done
+   ├ Problem formulation tricks · 17 tool uses · 59.2k tokens
+   │ ⎿  Done
+   └ Attack pattern domain knowledge · 19 tool uses · 58.8k tokens
+     ⎿  Done
+
+› Message from general-purpose
+  I saved the notes to /Users/alona/Documents/KSE/agentic/research_notes/Air
+  raid forecast data and formulation/formulation.md, with one section per key
+  question. Every claim there has a URL, but all of them come from search-result
+  snippets: I ran 13 searches and fetched no full text. Treat the numbers as
+  provisional until they are checked against the source PDFs. I found no study
+  that tests these techniques on onset problems like ours. Most "gains" below
+  come from neighbouring settings (counts, crime hotspots, retail forecasting).
+
+  1. **Hurdle / two-stage:** ML hurdle models exist for zero-inflated spatial
+  data (CatBoost crash frequency; XGBoost/LightGBM for crime rates; statistical
+  boosting for political violence), but I found no reported gain for binary
+  onsets. Even so, it is the strongest candidate on design grounds: P(wave
+  starts nationally) × P(oblast | wave). A tornado-warning student paper (not
+  peer-reviewed) found the first warning in an outbreak is much less likely to
+  be a false alarm, which suggests wave starts and in-wave spread behave
+  differently.
+  2. **Discrete-time hazard:** this is a binary GBM trained on person-period
+  rows. In a 2022 clinical comparison its advantage depended on the dataset. A
+  vineyard-disease early-warning paper found the gain from an onset target is
+  matching the target to the warning objective, not reliably better scores.
+  Check that our onset labels leave out bins where an alert is already active. I
+  did not check the XGBoost AFT or pycox docs.
+  3. **Multi-horizon:** the only evidence is indirect. Zeng et al. (DLinear)
+  attribute Transformers' forecasting gains to predicting all horizons directly
+  rather than to attention. My suggestion: stack the horizons as rows, add
+  horizon as a feature, and use LightGBM's monotone constraint so P(15) ≤ P(30)
+  ≤ P(60). This is a design idea, not tested.
+  4. **Ranking and focal loss:**
+     - **Ranking:** Mohler et al. 2020 trained a boosted ranking model for top-k
+  capture (CrimeRank), and it won the 2017 NIJ crime-forecasting challenge on
+  the PAI metric. LightGBM's LambdaRank, with each timestamp as a group of 24
+  oblasts, fits the top-k alerting goal. It does not give calibrated
+  probabilities.
+     - **Focal loss:** the evidence is weak. One thesis found plain class
+  weighting beat focal loss in LightGBM.
+  5. **Pooled vs per-region:** Montero-Manso and Hyndman show a single global
+  model can always match a set of per-series models. They suggest splitting the
+  data into clusters as a way to add complexity, so per-cluster models are worth
+  trying as ensemble members.
+  6. **Ensembling and calibration:**
+     - LightGBM-based solutions won both M5 tracks.
+     - In ViEWS 2020/21, a simple ensemble of entries was significantly better
+  than the average single model (gain size not seen).
+     - Venn-Abers gives calibrated binary probabilities with a guarantee, but
+  that guarantee assumes the data do not drift, so it would need rolling
+  recalibration here.
+  7. **Sequence models:** Grinsztajn et al. 2022 (45 datasets) found tree models
+  still state of the art on medium-sized tabular data, and DLinear matched or
+  beat Transformer forecasters. Deep sequence models are unlikely to be a quick
+  win.
+  8. **Operational lessons:**
+     - Brooks and Correia 2018 (tornado warnings) separate a system's skill from
+  its warning threshold. In 2012 the warning service cut false alarms, and lead
+  time and detection rate fell with them.
+     - One study (seen via a Mercatus summary) found a 1-SD rise in the tornado
+  false-alarm ratio raises expected fatalities by 12–29%.
+     - The Epic Sepsis Model scored AUC 0.63 at an outside hospital (sensitivity
+  33%, PPV 12%), alerted on 18% of patients and caused alert fatigue.
+     - Implication: report precision and recall at a fixed alert budget, plus
+  lead time gained, judged on a strictly later period.
+
+  **Gaps:** no direct numbers for any of these techniques on rare binary onsets;
+  no mixed-effects GBM, ShakeAlert or neural point-process evidence; and the
+  hurdle results in the KIT thesis on the 2023/24 VIEWS challenge could not be
+  seen.
+
+› Message from general-purpose
+  I've saved the research notes, with a URL next to each claim, to
+  /Users/alona/Documents/KSE/agentic/research_notes/Air raid forecast data and
+  formulation/attack_patterns.md. Several things were not found, and the ISIS
+  June 2026 report could not be read (gaps below).
+
+  **Main findings**
+  - **Shahed speeds:** propeller Shaheds fly at about 180–250 km/h, roughly
+  25–33 minutes per 100 km. Jet Geran-3 flies at about 500–600 km/h at around 4
+  km altitude. Jet drones were first used against Kyiv at some scale in July
+  2025 (up to 8). From mid-August 2026 they kept Kyiv under near-continuous
+  alerts, with a cluster around 17:00–19:00 (Texty, 24 Sep 2026).
+  - **Launch sites (OSINT reporting, not official confirmation):**
+    - Oryol/Tsymbulova, about 175 km from the border, described as the main site
+    - Navlya in Bryansk, about 70 km from the border
+    - Kursk-Khalino
+    - Shatalovo in Smolensk, about 46 km from the Belarus border
+    - Primorsko-Akhtarsk
+    - Millerovo
+    - Crimea and Donetsk airport
+
+    This gives fixed entry directions from the north, northeast, east and south.
+  Shaheds have also crossed Belarusian airspace.
+  - **Alert policy:**
+    - Since 15 Dec 2025, alerts are declared by raion (district) instead of for
+  the whole oblast, everywhere except Donetsk and Luhansk.
+    - It is run by DSNS (the State Emergency Service) together with the Air
+  Force and the oblast military administrations, after a pilot in 13 regions.
+    - Passing the signal from the Air Force to DSNS now takes 8–15 seconds
+  instead of minutes.
+    - Reported effect: some Dnipropetrovsk communities gained over 100
+  alert-free days, and Sumy oblast's alert time fell by 50 days.
+    - This is a structural break in the alert data and needs a regime flag in
+  the model.
+    - Every MiG-31K takeoff triggers a nationwide alert, because the aircraft
+  carries the Kinzhal missile.
+  - **How strikes are structured:**
+    - Drones are launched in the evening or late night, missiles follow toward
+  dawn, and official tallies come out around 07:30–08:30.
+    - From June 2025 the pattern was a steady ~180 drones a day, plus mass
+  attacks every 5–8 days. Attacks of more than 400 drones happened 4–5 times a
+  month.
+    - In Q4 2025 about 40% of launches were decoys (Gerbera, Parody). Mass
+  attacks use a higher share of decoys.
+    - The peak month was July 2025 with 6,297 launches.
+    - One April 2026 attack lasted about 32 hours.
+  - **Missile warning times:**
+    - Kinzhal reaches Kyiv in about 3 minutes (a media calculation).
+    - Iskander-M reaches Kyiv from Bryansk in about 4 minutes (a media
+  calculation).
+    - Kh-101 launched from the Caspian took about 2–2.5 hours to reach Ukrainian
+  airspace (2023–24 examples).
+    - Ballistic alerts therefore have almost no lead time and can't be predicted
+  from alerts spreading across neighbouring oblasts.
+
+  **Suggested features:** delayed alerts from upstream oblasts along known
+  routes (0.5–6 hours depending on distance), distance to the nearest launch
+  site, hour of day, days since the last mass attack, a nationwide-alert flag,
+  the regime flag above, and national monthly or rolling drone volume.
+
+  **Gaps:**
+  - No measured launch-to-arrival times for Kyiv or the western oblasts.
+  - No analysis of day-of-week or seasonal patterns.
+  - No 2025–26 data on the gap between drones and missiles within one attack.
+  - I didn't find the actual Cabinet resolution or the criteria for declaring an
+  alert.
+  - No published study of how alerts spread from oblast to oblast; those delays
+  will need to be learned from the alert data itself.
+  - The ISIS June 2026 PDF couldn't be parsed because no PDF tools were
+  available, so 2026 figures come only from search snippets.
+  - No CSIS or RUSI timing analysis was retrieved.
+
+› Message from general-purpose
+  I found two sources you can backfill now: the Vadimkin sirens dataset and the
+  Kaggle missile-attacks dataset. Neither one gives a real-time leading signal
+  for alert starts. The leading signals you asked about (threat type, drone
+  direction, NOTAMs, strategic aviation) exist only as Telegram post text; I
+  found no structured history for any of them. Full notes, with a URL on every
+  claim, are in `/Users/alona/Documents/KSE/agentic/research_notes/Air raid
+  forecast data and formulation/data_sources.md`.
+
+  **Kaggle "Massive Missile Attacks on Ukraine" (piterfm / Petro Ivaniuk)**
+  - **Status:** read from Kaggle's metadata API. It is version 214, last updated
+  2026-10-10, licence CC BY-NC-SA 4.0 (non-commercial only).
+  - **Files:**
+    - `missile_attacks_daily.csv` has these columns: `time_start, time_end,
+  model, launch_place, target, target_main, status_data, carrier, launched,
+  destroyed, not_reach_goal, border_crossing, still_attacking, num_hit_location,
+  num_fall_fragment_location, affected_region, destroyed_details,
+  launched_details, launch_place_details, source`.
+    - `missiles_and_uavs.csv` holds weapon specs.
+  - **Source:** compiled by hand from Air Force and General Staff
+  Facebook/Telegram posts; coverage starts October 2022.
+  - **Gaps in 2026 data:** the Air Force stopped publishing some missile launch
+  and intercept counts from 10 Aug 2026. ISIS-online says separate Shahed counts
+  stopped around 5 May 2026.
+  - **No GitHub mirror:** the piterfm GitHub account has only unrelated repos.
+  - **Leakage:** `time_start`/`time_end` are attack times. There is no column
+  for when a row was published, so you have to impose a lag, e.g. treat a row as
+  known only from the next morning.
+  - **Not verified:** I couldn't download the CSV without Kaggle login, so value
+  formats and 2026 row counts are unchecked.
+  - **Usefulness:** medium, as lagged attack-intensity features (recent launch
+  counts by weapon type) and as a direction hint from `launch_place`.
+
+  **Vadimkin/ukrainian-air-raid-sirens-dataset**
+  - **Columns:** I read the headers directly.
+    - `official_data_en.csv`:
+  `oblast,raion,hromada,level,started_at,finished_at,source`, in UTC.
+    - `volunteer_data_en.csv` (eTryvoga): `region,started_at,finished_at,naive`.
+  - **Coverage and licence:** MIT licence, updated daily.
+    - The volunteer file runs to 2026-10-12.
+    - The last row of the official file was 2026-09-07. It may be lagging or
+  just unsorted; check before use.
+  - **No threat type or reason field.** Its best use is the target variable plus
+  "neighbouring raions already alerted" features, which are safe because those
+  alerts are public as they happen.
+
+  **Alert archives with threat type**
+  - **alerts.in.ua:** its `alert_type` covers only air_raid, artillery_shelling,
+  urban_fights, chemical and nuclear. That is the alert category, not the
+  weapon.
+    - History only goes back one month (`month_ago`, 2 requests/min).
+    - You can't backfill it; you could only start collecting now.
+  - **ukrainealarm:** the API needs a key and its Swagger page returned 403, so
+  I couldn't confirm its `alertType` values or whether it has a history
+  endpoint.
+  - **Weapon-level threat types:** "ballistic", "Shahed toward X" and similar
+  exist only as Telegram post text.
+
+  **Launch sites, NOTAMs, strategic aviation**
+  - **ISIS-online:** publishes monthly PDF summaries, not event-level data.
+  - **Shahed Tracker:** cited in charts, but I found no downloadable dataset.
+  - **Airwars:** its Shahed launch map covers only 2022–23.
+  - **NOTAMs:** the FAA API serves current NOTAMs only. ICAO iSTARS has a
+  stored-NOTAM API, but I couldn't confirm Russian coverage or how far back it
+  goes.
+  - **Russian strategic aviation:** I found no open dataset.
+
+  **Electricity outage schedules:** I found no public historical archive.
+  Outages mostly follow strikes rather than precede them, so they are low value
+  as a leading signal.
+
+  **Other strike datasets**
+  - **UCDP Candidate:** free CSV/API, global, released monthly with up to a
+  one-month lag. That is too slow except as long-run background.
+  - **MotherDuck "SkyFall":** a visualisation built from the Air Force daily
+  reports (Sep 2022 – Jun 2026), by Volodymyr Pivoshenko. It likely overlaps
+  with piterfm. I found no download and don't know its table schema.
+  - **DiXi energy map:** not checked.
+
+  **Ranking**
+  1. Vadimkin sirens: high.
+  2. piterfm, with a publication lag imposed: medium.
+  3. Scraping Air Force and monitoring Telegram channels: potentially high and
+  safe from leakage because posts carry their publication time, but you would
+  have to build it.
+  4. alerts.in.ua: low.
+  5. UCDP, ACLED, ISIS-online and SkyFall: low.
+  6. NOTAMs, strategic aviation and outage schedules: no usable history
+  confirmed.
+
+⏺ Agent(Write final report)
+  ⎿  Done (7 tool uses · 69.9k tokens · 1m 58s)
+  (ctrl+o to expand)
+
+› Message from general-purpose
+  I wrote the report: /Users/alona/Documents/KSE/agentic/reports/Air raid
+  forecast data and formulation.md. It is based on the three notes in
+  research_notes/Air raid forecast data and formulation/ (data_sources,
+  formulation, attack_patterns) and builds on the earlier report without
+  repeating it.
+
+  **Main conclusion:** the Hawkes-proxy decay features added nothing, which
+  suggests the alert history has mostly been used up. The remaining gain is in
+  whether a national wave is coming and which way it spreads. The report
+  recommends changing what the model predicts rather than adding more
+  alert-history features.
+
+  **What the report finds:**
+
+  - **(A) Data sources.**
+    - **Vadimkin sirens repo:** the only strong new data you can backfill. It
+  has raion and hromada start/end times in UTC, under an MIT licence, but no
+  threat type.
+      - The official file's newest row was dated 2026-09-07, while the volunteer
+  file runs to 2026-10-12. Check whether the official file lags or is just
+  unsorted before using it for the September fold.
+      - Volunteer rows with a missing end time get an invented end of start + 30
+  min. Use them only for start events.
+    - **Kaggle piterfm dataset:** CC BY-NC-SA, so no commercial use, and usable
+  only as a lagged covariate. It has no publication-time column, so impose
+  availability from 09:00 Kyiv time the next day. Its counts break after about
+  May 2026 and again from 10 Aug 2026, inside your test folds.
+    - **Everything else fails on backfill or timing:** alerts.in.ua (one month
+  of history, coarse types), ukrainealarm (unverified, returned 403), UCDP and
+  ISIS (monthly), NOTAMs, and strategic-aviation and outage data (no archive
+  found).
+  - **(B) Modelling.**
+    - Keep the pooled LightGBM; global models are hard to beat.
+    - Add a hurdle model: P(national wave) × P(oblast joins | wave).
+    - Try LambdaRank grouped by timestamp across the 24 oblasts.
+    - Stack the 15/30/60-min horizons in one model with a monotone constraint on
+  horizon.
+    - Use cluster models only as ensemble members. Sequence models are low
+  priority.
+    - Most of this methods evidence comes from search snippets, and the report
+  flags each such claim.
+  - **(C) Domain knowledge.**
+    - **Drone speeds:** about 180–250 km/h for propeller Shaheds and 500–600
+  km/h for jet versions. Combined with fixed launch sites, this explains why
+  rear oblasts gain most from spatial features. It points to "corridor-lag"
+  features: lagged alerts in upstream oblasts.
+    - **Ballistic and MiG-31K events** have near-zero lead time. A MiG-31K
+  takeoff triggers a nationwide alert. Part of the 0.222 PR-AUC ceiling is
+  probably this unforecastable noise.
+    - **Timing is shifting:** jet drones caused near-continuous Kyiv alerts from
+  mid-Aug 2026 with a 17:00–19:00 peak, so a static hour-of-day prior is stale.
+    - **The 15 Dec 2025 switch to raion-level alerting is a label break.** All
+  six test folds fall after it, so training on earlier data mixes two
+  differently produced labels.
+
+  **Top experiments in the report's ranked list:**
+
+  1. Rebuild the target from raion rows and add a regime indicator for the
+  December switch.
+  2. Add features for the share of raions alerted in neighbouring and upstream
+  oblasts, lagged 15–120 min.
+  3. Add corridor lags estimated from cross-correlation inside each training
+  fold.
+  4. Flag simultaneous nationwide starts to measure how much of the error is
+  unforecastable.
+  5. Test the hurdle model.
+
+  The table goes on to items 6–12: multi-horizon, LambdaRank, Kaggle regime
+  features, a rolling hour-of-day prior, cluster ensembles, prospective logging,
+  and sequence models. Each has impact, effort and leakage notes.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The second research round is done. Three research tracks covered backfillable
+  data, how to frame the prediction problem, and attack routes and timing. The
+  report is at reports/Air raid forecast data and formulation.md
+  (reports/Air%20raid%20forecast%20data%20and%20formulation.md), and every claim
+  in it has a link.
+
+  Main conclusion: since the decay features added nothing, the alert history
+  itself is mostly used up. The remaining gains are in two questions: is a
+  national wave coming, and which way will it spread?
+
+  Findings that change the plan:
+  - Since 15 December 2025, alerts are declared by raion instead of for the
+    whole oblast. All six of our test folds are after this change, but most
+    training data is from before it. We need a flag for the change, and we
+    should test training on post-change data only.
+    - Our target already includes raion-level alerts, so part of the report's
+      experiment #1 is done.
+  - No new historical data source gives information before an alert.
+    - Kaggle missile-attacks dataset (CC BY-NC-SA licence): it can only be used
+      as a delayed feature, available from 09:00 the next day.
+    - alerts.in.ua: it only keeps one month of history.
+    - NOTAMs and strategic aviation: no historical archive exists.
+    - Real-time threat types exist only as Telegram text.
+  - Ballistic missile and MiG-31K alerts give almost no warning. Part of the
+    0.222 ceiling is noise that can't be forecast. Flagging alerts that start in
+    many oblasts at once would let us measure how much.
+  - Shaheds fly at about 180–250 km/h, and jet versions at about 500–600 km/h,
+    from fixed launch sites. That explains why rear oblasts gain most from
+    spatial features, and it suggests "corridor-lag" features along the drone
+    routes.
+  - Jet drones moved Kyiv's alerts toward 17:00–19:00 from mid-August 2026, so a
+    fixed time-of-day profile is out of date.
+
+  Top 5 experiments from the report:
+  1. Add the raion-change flag and try training only on data after
+     December 2025.
+  2. Add the share of raions on alert in neighbouring and upstream oblasts, now
+     and 15–120 minutes ago.
+  3. Add corridor-lag features estimated from the training data.
+  4. Add a flag for alerts starting in many oblasts at once, to estimate the
+     forecastable ceiling.
+  5. Try a two-stage model: probability of a national wave × probability the
+     oblast joins it.
+
+  One caution: much of the modelling evidence (two-stage models, LambdaRank)
+  comes from search snippets, and none of it was tested on problems like ours.
+  The report marks which claims are only partly verified. Also, the official
+  alerts file in the dataset ends on 7 September, while the volunteer file runs
+  to 12 October, so re-download it before the final evaluation.
+
+  Should I implement experiments 1, 2 and 4? They're the cheapest, and they fit
+  the existing walk-forward setup.
+
+❯ lets run the expiriments
+⏺ First I'll check whether the dataset has new data. The official file
+  previously ended on 7 September.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The data shows raion-level alerts actually began replacing oblast-level ones
+  in November 2025, not the official December 15 date, so I'll use this detected
+  switch date instead. Now writing the features.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ All 11 tests pass. The switch date detected from the data is 15 November 2025.
+  Now the experiment notebook:
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ I've started the experiments in 06_experiments_round2.ipynb, running in the
+  background with the same 6-fold walk-forward setup as notebook 05. There are 5
+  models × 3 horizons × 6 folds, so it'll take about 45–60 minutes.
+
+  What's being tested:
+  - Experiment 1, raion-level alerting regime:
+    - "v2 + regime flag" adds a feature marking data after the switch to
+      raion-level alerts.
+    - "v2 post-switch only" trains only on data after 15 November 2025. That's 3
+      months of training data in fold 1 and up to 8 months in fold 6.
+  - Experiment 2, raion-share features (model "v4"): the share of raions on
+    alert in the oblast itself, in border neighbours (now and 15/30/60/90/120
+    minutes ago), in the oblasts that most often precede it, and nationwide.
+    This is also tested trained on post-switch data only.
+  - Experiment 4, simultaneous-start diagnostic: I'll measure how many alert
+    starts happen in 8 or more oblasts in the same 5 minutes, which suggests
+    MiG-31K or ballistic threats. Then I'll compare PR-AUC with and without
+    them, to estimate how much of the error is unforecastable.
+
+  All new features pass the leakage test (11 of 11 tests pass). I'll report the
+  results when the run finishes.
+
+⏺ Background command "Generate and run round-2 experiments notebook" completed
+(exit code 0)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ All three experiments finished. The results are in 06_experiments_round2.ipynb
+  and data/results_06_experiments.csv.
+
+  Experiment 2: raion-share features help (small but consistent)
+
+  v4 (+raion share) is the new best model.
+
+  ┌──────────────────────────────────┬────────┬────────┬────────┐
+  │ Mean per-oblast PR-AUC (6 folds) │ 15 min │ 30 min │ 60 min │
+  ├──────────────────────────────────┼────────┼────────┼────────┤
+  │ v2 (previous best)               │ 0.152  │ 0.222  │ 0.295  │
+  ├──────────────────────────────────┼────────┼────────┼────────┤
+  │ v4 (+raion share)                │ 0.156  │ 0.227  │ 0.298  │
+  ├──────────────────────────────────┼────────┼────────┼────────┤
+  │ Folds won vs v2 (all oblasts)    │ 4/6    │ 6/6    │ 6/6    │
+  └──────────────────────────────────┴────────┴────────┴────────┘
+
+  - For rear oblasts at 30 and 60 minutes, v4 wins all 6 folds. At 30 minutes it
+    goes from 0.147 to 0.153; at 15 minutes it wins 5 of 6 folds, gaining
+    +0.007.
+  - The raion-share features account for 17% of feature importance.
+  - The gain is small (+0.004 to +0.005), but it's consistent across months,
+    which is what matters.
+
+  Experiment 1: the regime change doesn't need special handling
+
+  - Adding a "post-switch" flag made no difference: −0.003 to +0.002, mixed
+    across folds.
+  - Training only on data after the switch made results worse, especially for
+    frontline oblasts (−0.008 to −0.012). Losing 1–2 years of training data
+    costs more than mixing the two alerting regimes.
+  - Conclusion: keep the full 365-day training window with recency weights. That
+    already handles the change. The new raion-share features also describe the
+    alert in a way that works the same under both regimes.
+
+  Experiment 4: part of the error can't be forecast
+
+  - 10% of alert starts happen in 8 or more oblasts within the same 5 minutes.
+    This is likely MiG-31K or ballistic threats.
+  - These explain 6% of positive targets. Without them, v4 reaches 0.255 at 30
+    minutes instead of 0.227. Climatology barely changes (0.069 → 0.066).
+  - What this means for your report: about 0.03 of the PR-AUC gap comes from
+    alerts that have almost no warning time and can't be predicted from alert
+    history. Telegram data, such as Air Force posts about MiG-31K takeoffs,
+    wouldn't help either: as the first research round noted, a MiG-31K takeoff
+    triggers the nationwide alert immediately.
+
+  Current status
+
+  - Final model: v4. Mean per-oblast PR-AUC is 0.227 ± 0.021 at 30 minutes
+    (0.255 excluding simultaneous starts). That's 3.3× climatology and +0.059
+    over the own-history model.
+  - Gains from the alert history are now small: v1 → v2 gave +0.017, v2 → v4
+    gave +0.005, and the decay features gave 0. Larger improvements would need
+    new information, like the Kaggle attack-intensity data or Telegram.
+
+  The next options from the research are:
+  - the two-stage model (probability of a national wave × probability the oblast
+    joins)
+  - corridor-lag features
+  - updating PLAN.md with the final results and moving on to the Hawkes
+    propagation map for the report
+
+  Which do you want to do?
+
+❯ цршср ісщку вщ цу рфму тщц,
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ which score do we have now
+
+⏺ Current best model: v4 (LightGBM with own history, neighbours, attack-wave
+  direction, adjacency, raion-level counts and raion-share features, plus
+  recency weights). It's evaluated with 6-fold walk-forward validation
+  (March–September 2026) and no leakage.
+
+  ┌─────────────────────────────────────┬───────────┬───────────┬───────────┐
+  │       Mean per-oblast PR-AUC        │  15 min   │  30 min   │  60 min   │
+  ├─────────────────────────────────────┼───────────┼───────────┼───────────┤
+  │ Climatology (baseline)              │ 0.034     │ 0.069     │ 0.130     │
+  ├─────────────────────────────────────┼───────────┼───────────┼───────────┤
+  │ LightGBM-own history                │ 0.110     │ 0.168     │ 0.232     │
+  ├─────────────────────────────────────┼───────────┼───────────┼───────────┤
+  │ v4 (best)                           │ 0.156 ±   │ 0.227 ±   │ 0.298 ±   │
+  │                                     │ 0.015     │ 0.021     │ 0.027     │
+  ├─────────────────────────────────────┼───────────┼───────────┼───────────┤
+  │ v4, excluding simultaneous alerts   │ 0.171     │ 0.255     │ 0.323     │
+  │ that can't be forecast              │           │           │           │
+  └─────────────────────────────────────┴───────────┴───────────┴───────────┘
+
+  By group (30 minutes):
+  - Rear oblasts: 0.153 (own history 0.075, so about 2× better)
+  - Frontline oblasts: 0.398
+
+  Other metrics (30 minutes):
+  - Brier skill score against climatology: about +0.11, meaning 11% lower Brier
+    score than climatology
+  - PR-AUC relative to base rate: about 12× random
+
+  The main number for your report is 0.227 ± 0.021 at 30 minutes, about 3.3×
+  climatology.
+
+❯ write all score expiriments and general evaluation for all models which we
+  had in time order in another file
+
+⏺ Write(RESULTS.md)
+  ⎿  Wrote 203 lines to RESULTS.md
+      1 # Experiment Results Log — Air Raid Alert Start Forecasting
+      3 **Task:** at decision time τ, for each of 24 oblasts, predict P(a
+        n air raid alert **starts** in the oblast within the next 15 / 30
+      4 **Data:** official alerts (Vadimkin/ukrainian-air-raid-sirens-dat
+        aset), 15 Mar 2022 → 7 Sep 2026.
+        bins t+1…t+k, the neighbour graph and frontline/rear split are fi
+        tted on train only, and there's a 60-min embargo between periods.
+      6
+      7 Experiments are listed in the order they were run. **Two evaluati
+        le:**
+     … +283 lines (ctrl+o to expand)
+
+⏺ Written for: you, as a results log for the project write-up.
+
+  All experiment scores are in RESULTS.md, in the order they were run, from the
+  exploratory analysis through notebook 06. For each experiment it gives the
+  model scores by horizon and by group (all, rear, frontline), the statistical
+  tests, and a one-line conclusion.
+
+  The file also explains a detail that matters for the report: there are two
+  evaluation setups. Notebooks 02–04 used a single test month, and notebooks
+  05–06 used six monthly folds, which is the main setup. Their numbers aren't
+  directly comparable, so the progress table shows each model's score under
+  both.
+
+  At the end, the general evaluation has the best model's progress at 30
+  minutes, from climatology at 0.069 to the final model v4 at 0.227 ± 0.021. It
+  also has v4's scores at each horizon, a table of what worked and what didn't,
+  and the limitations and next steps.
+
+❯ <ide_opened_file>The user opened the file
+  /Users/alona/Documents/KSE/agentic/RESULTS.md in the IDE. This may or may not
+  be related to the current task.</ide_opened_file>
+
+❯ which other source of information can help improve score maybe location of
+  the rocket ?
+
+⏺ Yes. The location and direction of drones and missiles would be the strongest
+  signal you could add. Alerts are declared because a threat is heading toward
+  an area, so knowing where a threat is now largely tells you which oblasts will
+  be alerted next. Here's how realistic each source is.
+
+  1. Threat location and direction (strongest signal, limited data)
+
+  Source: Air Force official Telegram posts ("БпЛА на Сумщині, курсом на
+  Полтавщину", "швидкісна ціль на Київ")
+  What it gives: Threat type, current oblast, direction
+  Can you get history?: Yes: the scraper and parser in src/telegram.py are ready
+  Notes: Best candidate. These are official public warnings, and each post has a
+
+  publication time, so they're leakage-safe. Main blocker: Telegram's API terms
+   §1.5 restrict using its data to train ML models.
+  ────────────────────────────────────────
+  Source: Monitoring channels (Monitor, Где Ракета)
+  What it gives: More detailed and faster positions
+  Can you get history?: Yes, via Telegram
+  Notes: Same Telegram terms issue. They're unofficial, their style changes over
+
+  time, and the Air Force has warned about publishing real-time tracks.
+  ────────────────────────────────────────
+  Source: Radar or real-time tracking data
+  What it gives: Exact positions
+  Can you get history?: No
+  Notes: Not public, and publishing it is restricted under Ukraine's Criminal
+  Code Art. 114-2. Don't try to obtain it.
+  ────────────────────────────────────────
+  Source: alerts.in.ua threat tags
+  What it gives: Alert category
+  Can you get history?: Only 1 month back
+  Notes: You'd have to start logging now to use it later
+
+  Expected effect:
+  - Shaheds and other drones: biggest gain. They fly at about 180–250 km/h, so
+    there are 30 minutes to several hours between "drone over Sumy oblast
+    heading west" and an alert in Poltava or Kyiv. That's exactly your
+    30–60-minute horizon, and rear oblasts would benefit most.
+  - Cruise missiles (Kh-101, Kalibr): medium gain. Launch posts come tens of
+    minutes ahead.
+  - Ballistic missiles and MiG-31K / Kinzhal: almost no gain. Flight time is 3–4
+    minutes, and the alert is declared nationwide at once. That's the 6% of
+    positives the model can't forecast.
+
+  2. Precursors hours ahead (help at 60 minutes and with "is tonight an attack
+  night")
+
+  - Air Force posts about strategic bomber take-offs (Ту-95, Ту-160): they come
+    about 3–9 hours before missiles are launched.
+  - Kaggle "Massive Missile Attacks on Ukraine" (launch_place, model, launched):
+    this gives "days since the last mass attack" and the recent intensity of
+    Shahed launches. It has no publication-time column, so only use a row from
+    09:00 the next day. It's licensed for non-commercial use only, which is fine
+    for a university project.
+
+  3. Context (small effect)
+
+  - Weather from archived forecasts, not observed weather, since observations
+    are only published later.
+  - Moon phase.
+
+  What I'd recommend
+
+  1. Kaggle attack-intensity features. These are legally the cleanest and can be
+     fully backfilled. Expect a small gain, mostly at 60 minutes.
+  2. Air Force Telegram posts, if your supervisor confirms that using them for
+     an academic, non-commercial project is acceptable under Telegram's terms.
+     This is where the large gain for drone-driven alerts in rear oblasts would
+     come from.
+  3. Start logging the alerts.in.ua threat tags now, for future evaluation.
+
+  Should I start with the Kaggle features? You'd need to download the CSV with
+  your Kaggle account; it requires a login.
+
+❯ lets try Air Force official Telegram posts
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ No Telegram data exists yet—you'll need to run the scraper yourself since
+  login requires your phone and code. I'll get everything else ready so the
+  experiment can run as soon as the data's in.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The parser now handles Air Force phrasing like "Група ударних БпЛА… курсом
+  на…" and "швидкісна ціль", with all 6 Telegram tests passing. Next, I'll write
+  the experiment notebook so it's ready to run once the data exists.
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ I've prepared everything, but the experiment can only run once you've scraped
+  the posts, because that needs your Telegram login.
+
+  Ready now:
+  - Parser (src/telegram.py) handles Air Force phrasing: "Група ударних БпЛА на
+    Сумщині, курсом на Полтавщину" gives Sumy and Poltava, drones, with a
+    direction. "Швидкісна ціль" counts as a missile. The tests pass.
+  - Experiment notebook 07_telegram_features.ipynb:
+    a. Checks the channel: shows sample posts, so we can confirm it really is
+       the Air Force channel, plus posts per week and how often each threat type
+       is mentioned.
+    b. Measures lead time: for every alert start, how many minutes earlier the
+       oblast was mentioned in a post, and what share of alerts were mentioned
+       at all.
+    c. Runs the experiment: v4 against v4 + Telegram features, on the same 6
+       walk-forward folds, with folds won and feature importance.
+
+  What you need to do (about 5 minutes):
+  1. Go to https://my.telegram.org, open "API development tools", and create an
+     app. You'll get an api_id and an api_hash.
+  2. Create a file named .env in the project folder:
+  TG_API_ID=your_id
+  TG_API_HASH=your_hash
+  3. In your terminal, run:
+  cd /Users/alona/Documents/KSE/agentic
+  .venv/bin/python scrape_telegram.py --since 2025-01-25
+     It asks for your phone number and the code Telegram sends you. The start
+     date is early enough to cover the first fold's training data, which begins
+     on 9 February 2025. Downloading about 20 months of posts may take a few
+     minutes.
+
+  When data/telegram_raw.parquet exists, tell me. I'll check the posts first,
+  then run the experiment.
+
+  Before the results go in a report: Telegram's API terms (§1.5) restrict using
+  its data to train ML models. This is a non-commercial university project, but
+  ask your supervisor whether it's acceptable. You may also want to leave the
+  raw posts out of anything you share publicly.
+
+❯ цргср ща еру екуу фзш ензу цщгдв иу иуееук
+
+⏺ I think you're asking which platform to choose when creating the app on
+  my.telegram.org. Your keyboard was in Ukrainian layout, so the message came
+  through garbled.
+
+  The choice doesn't matter for scraping. It's only a label, and the api_id and
+  api_hash work the same whichever you pick. I'd choose Desktop (or Other).
+
+  The other fields:
+  - App title: anything, e.g. alerts research
+  - Short name: 5–32 letters or digits, e.g. alertsresearch
+  - URL: leave it empty
+  - Description: optional, e.g. University research project on air raid alert
+    forecasting
+
+  After you create it, copy the App api_id (a number) and the App api_hash (a
+  long string) into .env. Don't share the hash with anyone, including in this
+  chat. The .gitignore already keeps .env out of git.
+
+  If you meant something else, for example which of the three Telegram channels
+  to scrape, tell me and I'll answer that instead.
+
+❯ no which type of api which telegram provide ae better
+
+⏺ Telegram offers three ways to get data. For our task, the right one is the
+  Telegram (MTProto) API with Telethon, which is what scrape_telegram.py already
+  uses.
+
+  API: Telegram API (MTProto) via Telethon
+  What it is: Logs in as your user account, like a Telegram app
+  Can it download a channel's history?: Yes, the full history of any public
+  channel, with the date and edit_date of each post
+  Fit for us: ✅ Best. Gives the exact publication and edit times we need for
+  the
+  leakage rules.
+  ────────────────────────────────────────
+  API: Bot API
+  What it is: A bot account you create with @BotFather
+  Can it download a channel's history?: No. A bot only sees new posts in
+  channels
+  where it's an admin, and it can't read past posts.
+  Fit for us: ❌ Can't get 2025–2026 history from kpszsu
+  ────────────────────────────────────────
+  API: TDLib
+  What it is: Telegram's official client library (C++), the same MTProto
+  underneath
+  Can it download a channel's history?: Yes
+  Fit for us: ⚠️ Works, but it's harder to set up from Python and gives nothing
+  extra here
+
+  A fourth option without login is the public web page t.me/s/kpszsu. You can
+  scrape its HTML page by page without an API key, but:
+  - It only shows whether a post was edited, not when, so we couldn't apply the
+    "drop posts edited more than 5 minutes later" rule.
+  - It's slower and less reliable for 20 months of posts.
+
+  So: create the app on my.telegram.org (any platform), put the api_id and
+  api_hash into .env, and run scrape_telegram.py. That uses the MTProto API
+  through Telethon.
+
+❯ Gateway API ?
+
+⏺ No, the Gateway API isn't for reading channels. It's a paid Telegram service
+  that lets businesses send verification codes (one-time passwords) to users
+  through Telegram instead of SMS. For example, a bank's app could send a login
+  code to your Telegram. It can't read messages or download channel history.
+
+  The four kinds of Telegram API:
+
+  ┌─────────────────────┬─────────────────────────────┬─────────────────────┐
+  │         API         │           Purpose           │   Useful for us?    │
+  ├─────────────────────┼─────────────────────────────┼─────────────────────┤
+  │ Telegram API        │ Full client access: read    │                     │
+  │ (MTProto) via       │ channels and their history  │ ✅ Use this         │
+  │ Telethon            │                             │                     │
+  ├─────────────────────┼─────────────────────────────┼─────────────────────┤
+  │ Bot API             │ Building bots               │ ❌ Can't read past  │
+  │                     │                             │ posts               │
+  ├─────────────────────┼─────────────────────────────┼─────────────────────┤
+  │ TDLib               │ Building custom Telegram    │ ⚠️ Possible, but    │
+  │                     │ apps                        │ more complicated    │
+  ├─────────────────────┼─────────────────────────────┼─────────────────────┤
+  │ Gateway API         │ Sending verification codes  │ ❌ Not related to   │
+  │                     │ for business apps           │ reading data        │
+  └─────────────────────┴─────────────────────────────┴─────────────────────┘
+
+  So on my.telegram.org, open "API development tools", not the Gateway section.
+  There you'll get the api_id and api_hash for the .env file.
+
+❯ <ide_opened_file>The user opened the file
+  /Users/alona/Documents/KSE/agentic/.env in the IDE. This may or may not be
+  related to the current task.</ide_opened_file>
+
+❯ i added tg token try now
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ I checked .env without printing its contents. Both values are still empty:
+  TG_API_ID= and TG_API_HASH= have nothing after the =. Most likely the file
+  isn't saved yet in VS Code: press Cmd+S.
+
+  It should look like this, with no quotes or spaces:
+  TG_API_ID=12345678
+  TG_API_HASH=0123456789abcdef0123456789abcdef
+  - TG_API_ID is a number, usually 7–8 digits.
+  - TG_API_HASH is 32 letters and digits.
+  - Both come from my.telegram.org → API development tools. A bot token from
+    @BotFather (which looks like 123456:ABC-…) won't work, because bots can't
+    read channel history.
+
+  After saving, run the scraper in your own terminal (VS Code: Terminal → New
+  Terminal):
+  cd /Users/alona/Documents/KSE/agentic
+  .venv/bin/python scrape_telegram.py --since 2025-01-25
+  The first time, it asks for your phone number and then the login code Telegram
+  sends you. I can't enter those from here, and please don't paste the login
+  code in this chat: it gives access to your Telegram account. After the first
+  login, the session is saved to data/tg_session.session, so later runs won't
+  ask again.
+
+  When it prints the summary (number of posts, first and last date), tell me and
+  I'll run the experiment.
+
+❯ <ide_opened_file>The user opened the file
+  /Users/alona/Documents/KSE/agentic/.env in the IDE. This may or may not be
+  related to the current task.</ide_opened_file>
+
+❯ i saved token
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The keys now look correctly formatted, and I spotted an existing session file
+  suggesting login may already be in progress. I'll check if it's authorized
+  without triggering any prompts.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ The keys work and connect to Telegram, but the session isn't logged in yet.
+  Logging in needs your phone number and the code Telegram sends you, and I
+  can't type those from here.
+
+  Run this in your terminal (VS Code: Terminal → New Terminal):
+  cd /Users/alona/Documents/KSE/agentic
+  .venv/bin/python scrape_telegram.py --since 2025-01-25
+  1. Phone number: enter it in international format, e.g. +380XXXXXXXXX.
+  2. Code: Telegram sends it to your Telegram app, not by SMS. Enter it in the
+     terminal.
+  3. Password: if you have two-step verification turned on, it asks for that
+     too.
+  4. Then it downloads the kpszsu posts and prints a summary: the number of
+     posts and the first and last date.
+
+  Don't paste the code or password into this chat. After this first login, the
+  session is saved, and I can run later updates myself without any prompts.
+
+  When it finishes, write "done". I'll check that it's the official Air Force
+  channel and then run notebook 07.
+
+❯ how to stop it?
+
+⏺ Press Ctrl+C in the terminal where it's running. On Mac it's also Ctrl, not
+  Cmd.
+
+  Important: the current scraper only saves when it finishes downloading. If you
+  stop it partway through, the posts downloaded so far are lost, and the next
+  run starts from the beginning. Your login is kept, though: the session file
+  stays, so you won't need the code again.
+
+  If it's taking too long, I can change the scraper to save every few thousand
+  posts, so stopping and restarting continues where it left off. Should I do
+  that?
+
+❯ add so i could see how many we scraped and so my sccount was not banned
+
+  Read 1 file (ctrl+o to expand)
+
+⏺ Update(src/telegram.py)
+  ⎿  Added 50 lines, removed 17 lines
+       75                  os.environ.setdefault(k.strip(), v.strip())
+       76  
+       77  
+       78 +SAVE_EVERY = 1000          # checkpoint to disk every N new po
+          +sts                                                           
+       79 +WAIT_BETWEEN_REQUESTS = 1  # seconds between 100-message histo
+          +ry requests (gentle on rate limits)                           
+       80 +MAX_AUTO_FLOOD_WAIT = 300  # Telegram "slow down" waits up to 
+          +5 min are slept through; longer → save and stop               
+       81 +                                                              
+       82 +                                                              
+       83 +def _save(old: pd.DataFrame, rows: list, out: Path) -> pd.Data
+          +Frame:                                                        
+       84 +    df = pd.concat([old, pd.DataFrame(rows)], ignore_index=Tru
+          +e).drop_duplicates(["channel", "id"])                         
+       85 +    tmp = out.with_suffix(".tmp")                             
+       86 +    df.to_parquet(tmp, index=False)                           
+       87 +    tmp.replace(out)                                     # ato
+          +mic: an interrupted save never corrupts the file              
+       88 +    return df                                                 
+       89 +                                                              
+       90 +                                                              
+       91  async def _scrape(channels, since, out: Path, session: str):
+       92 +    import time                                               
+       93      from telethon import TelegramClient
+       94 +    from telethon.errors import FloodWaitError                
+       95      _load_env()
+       96      api_id, api_hash = int(os.environ["TG_API_ID"]), os.enviro
+           n["TG_API_HASH"]
+       97      old = pd.read_parquet(out) if out.exists() else pd.DataFra
+           me()
+       83 -    rows = []                                                 
+       84 -    async with TelegramClient(session, api_id, api_hash) as cl
+          -ient:                                                         
+       85 -        for ch in channels:                                   
+       86 -            min_id = int(old.loc[old.channel == ch, "id"].max(
+          -)) if len(old) and (old.channel == ch).any() else 0           
+       87 -            n = 0                                             
+       88 -            async for m in client.iter_messages(ch, reverse=Tr
+          -ue, offset_date=since, min_id=min_id):                        
+       89 -                if not m.message:                             
+       90 -                    continue                                  
+       91 -                rows.append({"channel": ch, "id": m.id, "date"
+          -: m.date, "edit_date": m.edit_date,                           
+       92 -                             "fwd": m.fwd_from is not None, "t
+          -ext": m.message})                                             
+       93 -                n += 1                                        
+       94 -            print(f"{ch}: {n} new messages")                  
+       95 -    df = pd.concat([old, pd.DataFrame(rows)], ignore_index=Tru
+          -e).drop_duplicates(["channel", "id"])                         
+       96 -    df.to_parquet(out, index=False)                           
+       97 -    return df                                                 
+       98 +    rows, total = [], len(old)                                
+       99 +    async with TelegramClient(session, api_id, api_hash, flood
+          +_sleep_threshold=MAX_AUTO_FLOOD_WAIT) as client:              
+      100 +        try:                                                  
+      101 +            for ch in channels:                               
+      102 +                min_id = int(old.loc[old.channel == ch, "id"].
+          +max()) if len(old) and (old.channel == ch).any() else 0       
+      103 +                print(f"{ch}: {'resuming after id ' + str(min_
+          +id) if min_id else 'starting from ' + str(since.date())}")    
+      104 +                n, t0 = 0, time.time()                        
+      105 +                async for m in client.iter_messages(ch, revers
+          +e=True, offset_date=since, min_id=min_id,                     
+      106 +                                                    wait_time=
+          +WAIT_BETWEEN_REQUESTS):                                       
+      107 +                    if not m.message:                         
+      108 +                        continue                              
+      109 +                    rows.append({"channel": ch, "id": m.id, "d
+          +ate": m.date, "edit_date": m.edit_date,                       
+      110 +                                 "fwd": m.fwd_from is not None
+          +, "text": m.message})                                         
+      111 +                    n += 1                                    
+      112 +                    if n % 100 == 0:                          
+      113 +                        print(f"\r  {ch}: {n} new posts, up to
+          + {m.date:%Y-%m-%d %H:%M} UTC "                                
+      114 +                              f"({n / max(time.time() - t0, 1)
+          +:.0f}/s)", end="", flush=True)                                
+      115 +                    if len(rows) >= SAVE_EVERY:               
+      116 +                        old, rows = _save(old, rows, out), [] 
+      117 +                        print(f"  → saved ({len(old)} total)",
+          + flush=True)                                                  
+      118 +                print(f"\n{ch}: done, {n} new posts")         
+      119 +        except FloodWaitError as e:                           
+      120 +            print(f"\nTelegram asked to wait {e.seconds}s — sa
+          +ving and stopping. Re-run later to continue.")                
+      121 +        except (KeyboardInterrupt, asyncio.CancelledError):   
+      122 +            print("\nInterrupted — saving what was downloaded.
+          + Re-run to continue.")                                        
+      123 +        finally:                                              
+      124 +            old = _save(old, rows, out) if rows else old      
+      125 +            print(f"saved {len(old)} posts in total ({len(old)
+          + - total} new this run) → {out}")                             
+      126 +    return old                                                
+      127  
+      128  
+      129  def scrape(channels, since, out="data/telegram_raw.parquet", s
+           ession="data/tg_session"):
+      101 -    """Download all text messages since `since` (incremental: 
+          -resumes from the last saved id)."""                           
+      102 -    return asyncio.run(_scrape(channels, pd.Timestamp(since).t
+          -o_pydatetime(), Path(out), session))                          
+      130 +    """Download all text messages since `since`. Saves every S
+          +AVE_EVERY posts and on Ctrl+C;                                
+      131 +    re-running resumes after the last saved post id."""       
+      132 +    try:                                                      
+      133 +        return asyncio.run(_scrape(channels, pd.Timestamp(sinc
+          +e).to_pydatetime(), Path(out), session))                      
+      134 +    except KeyboardInterrupt:                                 
+      135 +        return pd.read_parquet(out) if Path(out).exists() else
+          + pd.DataFrame()                                               
+      136  
+      137  
+      138  # ------------------------------------------------------------
+           ---- cleaning + grid features
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The scraper in src/telegram.py now shows progress, saves as it goes, and is
+  gentler on Telegram's rate limits. I tested the saving and resuming on dummy
+  data and the Telegram tests pass, but I couldn't run it against Telegram
+  itself because your account isn't logged in here.
+
+  Progress: a line that updates every 100 posts:
+  kpszsu: starting from 2025-01-25
+    kpszsu: 3400 new posts, up to 2025-06-14 21:37 UTC (85/s)  → saved (3000
+  total)
+  The date shows how far it has got toward today.
+
+  Safe stopping:
+  - It saves to disk every 1,000 posts.
+  - Ctrl+C saves what it has downloaded so far, then stops.
+  - Running it again continues after the last saved post: resuming after id ….
+  - The file is written safely, so an interrupted save can't corrupt it.
+
+  To avoid problems with your account:
+  - It pauses 1 second between requests. Each request fetches 100 posts, so it
+    stays well under Telegram's limits.
+  - If Telegram asks it to wait (a "FloodWait"):
+    - for up to 5 minutes, it simply waits and continues;
+    - for longer, it saves and stops instead of retrying, and prints a message
+      so you can rerun it later.
+  - Reading a public channel's history through the official API is normal use.
+    Problems usually come from sending messages, joining many channels, or
+    ignoring Telegram's wait requests, and the scraper does none of these.
+
+  Run the same command as before:
+  .venv/bin/python scrape_telegram.py --since 2025-01-25
+  kpszsu probably has a few thousand posts since January 2025, so it should only
+  take a few minutes.
+
+❯ how many i already fetched
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ No posts have been saved yet since the earlier run used the old scraper that
+  only saved at the end, so stopping it lost all progress. Your login session is
+  now authorized, so I'll run the updated scraper myself without needing
+  prompts.
+
+  Listed 1 directory, ran 1 shell command (ctrl+o to expand)
+
+⏺ The scraper is running in the background, logged in with your session. Nothing
+  has been written to disk yet: the first save happens at 1,000 posts, and my
+  progress filter buffers the output, so the count isn't visible until then.
+
+  I'll be notified when it finishes. You can also check the count yourself at
+  any time:
+  .venv/bin/python -c "import pandas as pd;
+  d=pd.read_parquet('data/telegram_raw.parquet'); print(len(d), d.date.min(),
+  d.date.max())"
+  When it's done, I'll check that it's the official Air Force channel and run
+  notebook 07.
+
+❯ alona@Noutbuk-Alona agentic % .venv/bin/python -c "import pandas as pd;
+  d=pd.read_parquet('data/telegram_raw.parquet'); print(len(d), d.date.min(),
+  d.date.max())"
+
+  16000 2025-01-25 00:01:46+00:00 2025-10-01 19:09:36+00:00
+
+⏺ It's working. 16,000 posts are saved so far, from 25 January 2025 to 1 October
+  2025.
+
+  That's about 2,000 posts a month, so the remaining 12 months to October 2026
+  should add roughly 24,000 more, around 40,000 in total. At the current speed
+  it should finish soon. You don't need to do anything; I'll be notified when
+  it's done.
+
+  Many more posts than I expected means the Air Force posts many short real-time
+  messages, like "БпЛА на …, курсом на …". That's good for our features,
+  because those messages carry the threat's current location and direction.
+
+⏺ Background command "Scrape kpszsu channel since Jan 2025 with checkpoints"
+completed (exit code 0)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Download complete: 57,950 posts verified as the official Air Force channel,
+  with 91% passing the leakage filter and posting volume up sharply through
+  2026. Now running notebook 07 for lead-time analysis, then comparing v4
+  against v4 + Telegram across the 6 folds.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The experiment is running in the background. It trains 2 models × 3 horizons ×
+  6 folds, so it'll take about 30–40 minutes. I'll report the results when it
+  finishes.
+
+⏺ Background command "Run Telegram features experiment notebook" completed (exit
+code 0)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The Telegram experiment is done, and the gain is small. The results are in
+  07_telegram_features.ipynb and data/results_07_telegram.csv.
+
+  Results (mean per-oblast PR-AUC, 6 folds)
+
+  ┌────────────────────┬─────────────────────┬──────────────┬──────────────┐
+  │                    │       15 min        │    30 min    │    60 min    │
+  ├────────────────────┼─────────────────────┼──────────────┼──────────────┤
+  │ v4                 │ 0.156               │ 0.227        │ 0.298        │
+  ├────────────────────┼─────────────────────┼──────────────┼──────────────┤
+  │ v4 + Telegram      │ 0.161 (5/6 folds    │ 0.227 (4/6)  │ 0.300 (2/6)  │
+  │                    │ won)                │              │              │
+  ├────────────────────┼─────────────────────┼──────────────┼──────────────┤
+  │ Rear, v4 →         │ 0.104 → 0.112 (5/6) │ 0.153 →      │ 0.213 →      │
+  │ +Telegram          │                     │ 0.153        │ 0.216        │
+  ├────────────────────┼─────────────────────┼──────────────┼──────────────┤
+  │ Frontline          │ ≈ 0                 │ ≈ 0          │ ≈ 0          │
+  └────────────────────┴─────────────────────┴──────────────┴──────────────┘
+
+  - There's a gain only at 15 minutes for rear oblasts: +0.008, winning 5 of 6
+    folds, which is +8%.
+  - At 30 and 60 minutes there's no consistent gain.
+  - The Telegram features get only 3.6% of feature importance.
+
+  Why the gain is small: lead-time analysis
+
+  - Only 30% of alert starts had a post mentioning that oblast in the 3 hours
+    before, and only 10% in the hour before.
+  - The channel focuses heavily on the frontline: Sumy is mentioned 8,430 times
+    and Kharkiv 7,610 (mostly "КАБи на…"), while Vinnytsia has 360 mentions,
+    Lviv 111 and Zakarpattia 3.
+  - Rear oblasts are rarely named in advance: 6% of alerts for Vinnytsia and
+    Cherkasy, 2–3% for Ternopil and Ivano-Frankivsk. Those are exactly the
+    oblasts where we needed the help.
+  - The model already captures frontline КАБ alerts from alert history, so
+    naming them in posts adds nothing new.
+  - Many posts name a town or raion instead of the oblast, e.g. "Брусилів",
+    "Макарів", "Вознесенський район". The parser doesn't recognise most towns,
+    so those mentions are lost.
+
+  How to get more from this data
+
+  1. Add a town and raion list: match place names (about 1,500 towns and 136
+     raions) to their oblast. This would probably increase rear-oblast coverage
+     most.
+  2. Use the direction: separate "where the threat is now" from "where it's
+     heading" (after "курсом на" or "у напрямку"), and add drone counts
+     ("група", "5 БпЛА").
+  3. Add posts from the last 1–3 hours about neighbouring or upstream oblasts,
+     e.g. "drones over Zhytomyr heading west", as a feature for western oblasts.
+  4. Account for the change in posting: the channel posted 2.5× more in
+     September 2026 than in 2025, so the features' meaning shifts. Counts
+     relative to recent volume would handle this.
+
+  Bottom line for the report: official Air Force posts help a little, at the
+  shortest horizon for rear oblasts. Most of their information already shows up
+  in the alert history, because alerts are declared from the same Air Force
+  information. This is an honest negative result, and it's worth reporting.
+
+  Should I try improvements 1 and 2 (the town list and direction parsing)?
+  They're the most likely to raise the score.
+
+❯ lets doo al of this
+
+⏺ I'll do all four. First I'll check whether the alert dataset has Ukrainian
+  raion and hromada names, which would give an official list of place names for
+  the gazetteer:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ The Ukrainian version has 118 raions and 133 hromadas, with rows matching the
+  English file one to one. That gives an official list of place names for the
+  gazetteer. Now the parser and features:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Place coverage improved to 83% of posts (424 stems), with 22% having a
+  destination oblast and 1.4 objects per post on average, and all Telegram tests
+  pass including the new leakage test. Next, I'll move on to the comparison
+  notebook.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I've added all four improvements, and the comparison is running in the
+  background (about 40 minutes).
+
+  What's new in src/telegram.py:
+  1. Place-name list: 424 town and raion names taken from the official dataset's
+     Ukrainian raion and hromada names, each mapped to its oblast. For example,
+     "Брусилів" maps to Zhytomyr and "Вознесенському районі" to Mykolaiv. Names
+     that exist in more than one oblast are skipped. Posts with at least one
+     recognised oblast rose from 78.5% to 83%.
+  2. Location vs destination: in "5 БпЛА у Вознесенському районі, курсом на
+     Кропивницький", Mykolaiv is the current location and Kirovohrad the
+     destination. The parser also reads object counts: "5 БпЛА" counts as 5, and
+     "групи" as at least 2.
+  3. Neighbouring oblasts: posts about border neighbours and about oblasts that
+     usually precede this one, over the last 15, 60 and 180 minutes.
+  4. Relative rates: counts divided by the channel's posting rate over the
+     previous 7 days, so the 2.5× growth in posting doesn't distort the
+     features.
+
+  Tests pass, including a leakage test for the new features.
+
+  Notebook 08_telegram_features_v2.ipynb compares three models (v4, v4 +
+  Telegram v1, v4 + Telegram v2) on the same 6 folds, with the lead-time
+  analysis redone using the new parser. I'll report when it finishes.
+
+❯ okay now lets train the mpdel with this new features
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ That training is already running. Notebook 08 is training the model with the
+  new features right now: v4 + Telegram v2 (place-name list, location vs
+  destination, counts, neighbouring oblasts, relative rates), on the same 6
+  walk-forward folds. It's training v4 and v4 + Telegram v1 alongside it for
+  comparison.
+
+  It's still in progress. I'll get a notification when it finishes and will
+  report the results then.
+
+❯ <ide_opened_file>The user opened the file
+  /Users/alona/Documents/KSE/agentic/PLAN.md in the IDE. This may or may not be
+  related to the current task.</ide_opened_file>
+
+❯ okay what is now?
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ It's still training. The experiment process is running, but it hasn't saved
+  its predictions yet, because they're written once all 6 folds are done. With 3
+  models per fold this time instead of 2, it takes about 1.5× longer than
+  notebook 07, roughly 40–50 minutes in total.
+
+  I'll get a notification when it finishes and will send you the comparison of
+  v4, Telegram v1 and Telegram v2 then.
+
+❯ write the isual part of it also so it had htm css and had a style with
+  ukraine map and the probability of airalarm
+
+⏺ Skill(dataviz)
+  ⎿  Successfully loaded skill
+
+  Ran 3 shell commands (ctrl+o to expand)
+
+⏺ The dataviz skill says a magnitude like probability should use a single-hue
+  sequential ramp. I'll use its validated blue ramp, with a legend and tooltips.
+  Next I need oblast boundaries for the map:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ I'll represent Kyiv City with a circle marker since it lacks a polygon, and
+  mark Crimea and Luhansk as hatched "no data" since they have no model
+  predictions. Now I'll write the generator script and page.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(dashboard/make_dashboard.py)
+  ⎿  Wrote 139 lines to dashboard/make_dashboard.py
+       1 """Build dashboard/index.html: a Ukraine map of model-predicted
+       2
+       3 Replays the out-of-sample (walk-forward test) predictions — a hi
+         storical backtest, not a live feed.
+       5 Usage:
+       6     .venv/bin/python dashboard/make_dashboard.py
+       7     .venv/bin/python dashboard/make_dashboard.py --preds data/pr
+         eds_08_telegram_v2.parquet --model "v4 + Telegram v2"
+       8 """
+      10 import json
+     … +172 lines (ctrl+o to expand)
+
+⏺ Write(dashboard/template.html)
+  ⎿  Wrote 358 lines to dashboard/template.html
+       1 <!doctype html>
+       2 <html lang="en">
+       3 <head>
+       5 <meta name="viewport" content="width=device-width, initial-scale
+         =1">
+       6 <title>Air Alert Forecast</title>
+       7 <link rel="preconnect" href="https://fonts.googleapis.com">
+         400;500;600;700&display=swap" rel="stylesheet">
+       9 <style>
+      10 :root {
+     … +504 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The page is generated: 2,876 time steps from the last test month, 1.4 MB.
+  Before showing it, I'll take a screenshot to check the layout:
+
+  Read 1 file, listed 1 directory, ran 1 shell command (ctrl+o to expand)
+
+⏺ I've built the map page. Open dashboard/index.html in a browser (double-click
+  it); it's a single self-contained file.
+
+  The screenshot above shows it in dark mode. It also has a light mode and a
+  theme button.
+
+  What's on the page:
+  - Map of Ukraine: each oblast is shaded by its probability that an alert
+    starts within the chosen horizon. The bins go from <2% to ≥50% on a
+    single-hue blue scale, which is easy to read for colour-blind viewers.
+    - A dashed outline marks oblasts on alert right now.
+    - Kyiv City is a circle marker, since the map data has no separate polygon
+      for it.
+    - Crimea and Luhansk are hatched as "no forecast".
+  - Controls:
+    - 15 / 30 / 60-minute horizon switch
+    - timeline slider with ▶ play and speed options
+    - "Jump to busiest night"
+    - keyboard: ← → to step, space to play or pause
+  - Side panel:
+    - expected number of new oblast alerts
+    - how many oblasts are on alert now
+    - the highest-risk oblast
+    - a top-10 list with bars
+    - ✓ marking where an alert really did start within the horizon, so you can
+      see the model's hits and misses
+  - Tooltip on hover: the probability, the usual rate for that oblast, how many
+    times above usual it is, whether it's on alert now, and what actually
+    happened.
+  - "Method & scores" section, and a clear notice that this is a historical
+    replay of out-of-sample predictions, not a warning system.
+
+  Data shown: model v4's predictions for the last test month (8 August – 7
+  September 2026), every 15 minutes. These are honest out-of-sample predictions
+  from the walk-forward evaluation.
+
+  How it's built:
+  - dashboard/make_dashboard.py generates the page.
+  - dashboard/template.html holds the HTML and CSS.
+  - You can show another model's predictions, for example once notebook 08
+    finishes:
+  .venv/bin/python dashboard/make_dashboard.py --preds
+  data/preds_08_telegram_v2.parquet --model "v4 + Telegram v2"
+
+  Notebook 08 (Telegram v2) is still running. When it finishes, I'll report its
+  results and can rebuild the page with the better model if it wins. I can also
+  publish the page as a private link if you want to share it with your
+  supervisor.
+
+⏺ Background command "Build and run Telegram v2 experiment notebook" completed
+(exit code 0)
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Notebook 08 (Telegram v2) has finished. The richer Telegram features didn't
+  beat the simple version.
+
+  ┌────────────────┬───────┬───────┬───────┬────────┬────────┬────────────┐
+  │     Mean       │       │       │       │        │        │            │
+  │  per-oblast    │  15   │  30   │  60   │ Rear   │ Rear   │ Frontline  │
+  │   PR-AUC, 6    │  min  │  min  │  min  │ 15 min │ 30 min │   30 min   │
+  │     folds      │       │       │       │        │        │            │
+  ├────────────────┼───────┼───────┼───────┼────────┼────────┼────────────┤
+  │ v4 (alert data │ 0.156 │ 0.227 │ 0.298 │ 0.104  │ 0.153  │ 0.398      │
+  │  only)         │       │       │       │        │        │            │
+  ├────────────────┼───────┼───────┼───────┼────────┼────────┼────────────┤
+  │ v4 + Telegram  │ 0.161 │ 0.227 │ 0.300 │ 0.112  │ 0.153  │ 0.398      │
+  │ v1             │       │       │       │        │        │            │
+  ├────────────────┼───────┼───────┼───────┼────────┼────────┼────────────┤
+  │ v4 + Telegram  │ 0.159 │ 0.227 │ 0.299 │ 0.112  │ 0.156  │ 0.392      │
+  │ v2             │       │       │       │        │        │            │
+  └────────────────┴───────┴───────┴───────┴────────┴────────┴────────────┘
+
+  What changed with v2:
+  - Coverage barely improved. The place-name list raised posts with a recognised
+    oblast from 78.5% to 83%, and alert starts with a mention in the previous 3
+    hours from 30% to 32.5%. Rear oblasts are still rarely named: Vinnytsia
+    went from 6% to 16%, but the western oblasts stay at 1–3%.
+  - Rear oblasts at 30 minutes: a small gain, +0.003 over v4, winning 5 of 6
+    folds.
+  - Frontline oblasts got slightly worse (−0.005, winning 1–2 of 6 folds). The
+    extra features most likely overfit there, because the model already handles
+    frontline alerts well.
+  - The Telegram v2 features take 8.9% of feature importance, but that doesn't
+    turn into better scores.
+
+  Conclusion for your report:
+  - Official Air Force posts help only slightly, mainly for rear oblasts at 15
+    minutes (about +8%).
+  - Better text processing didn't help. Alerts are declared from the same Air
+    Force information, so most of what the posts contain is already in the alert
+    history.
+  - That's a clear, honest finding.
+
+  Recommended final model:
+  - v4 if you use alert data only. It's simpler and has no Telegram
+    terms-of-service issue.
+  - v4 + Telegram v1 if you want to show the optional text part of the task.
+    It's the best at 15 and 60 minutes.
+
+  I've added sections 7–8 and a final summary table to RESULTS.md.
+
+  Should I rebuild the map page with v4 + Telegram v1 predictions, or keep it on
+  v4?
+
+❯ show the dashboard
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ I've opened dashboard/index.html in your default browser.
+
+  It opens on the busiest night of the test month, 19 August 2026. To explore:
+  - ▶ Play (or the space bar) replays the month in 15-minute steps. The ← → keys
+    move one step at a time.
+  - 15 / 30 / 60 min switches the forecast horizon.
+  - Hover over an oblast or a row in the list to see its probability, usual
+    rate, whether it's on alert now, and what actually happened.
+  - ◐ Theme switches between light and dark.
+
+  It currently shows the v4 model. If you want the v4 + Telegram v1 predictions
+  instead, I'll rebuild it.
+
+❯ commit and push
+
+  Ran 5 shell commands (ctrl+o to expand)
+
+⏺ I've committed the changes and pushed them to GitHub.
+
+  - Repository: https://github.com/AlonaNazarenko/agentic-school
+  - Branch: air-raid-forecasting. You were on main, so I created a separate
+    branch first. The GitHub repo was empty, so this is now its only branch.
+  - Commits pushed:
+    a. 6e1791e: the earlier project commit (EDA, baselines, LightGBM,
+       walk-forward CV, Telegram features).
+    b. a6bfba4: Telegram v2 results in RESULTS.md and the dashboard/ folder
+       (generator, template and the built map page).
+
+  What was kept out: .env (your Telegram keys), the Telegram session file, data/
+  (raw alerts, scraped posts, predictions) and .venv/ are all in .gitignore. I
+  checked that none of them are tracked and that no API hash appears in the
+  pushed files.
+
+  Two things to know:
+  - The executed notebooks 07 and 08 include a few sample Air Force posts in
+    their outputs. These are public posts, but because of the Telegram
+    terms-of-service question, you might want to clear those outputs before
+    making the repo public.
+  - If you want the work on main, merge the branch on GitHub or run git checkout
+    main && git merge air-raid-forecasting && git push -u origin main.
+
+❯ write as was asked also files in .py but do not deleat
+
+⏺ I'll export every notebook to a .py script next to it, keeping the notebooks:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ All 8 scripts compile, but trailing table expressions won't print and
+  plt.show() calls would block execution when run as scripts. I'll write an
+  improved converter that prints those tables and saves each figure to figures/
+  instead.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ A line with two statements separated by ; broke the wrapping. I'll make it
+  wrap only the expression itself, using its exact position:
+
+⏺ Update(export_scripts.py)
+  ⎿  Added 6 lines, removed 3 lines
+      44      if isinstance(call, ast.Call) and isinstance(call.func, ast
+          .Attribute) and call.func.attr in {"barh", "bar", "hist", "kde"
+          }:
+      45          return src
+      46      lines = src.split("\n")
+      47 -    start, end = last.lineno - 1, last.end_lineno              
+      48 -    expr = "\n".join(lines[start:end])                         
+      49 -    return "\n".join(lines[:start] + [f"print({expr})"] + lines
+         -[end:])                                                        
+      47 +    s, e = last.lineno - 1, last.end_lineno - 1                
+      48 +    head, tail = lines[s][: last.col_offset], lines[e][last.end
+         +_col_offset:]                                                  
+      49 +    body = lines[s:e + 1]                                      
+      50 +    body[-1] = body[-1][: last.end_col_offset]                 
+      51 +    body[0] = body[0][last.col_offset:]                        
+      52 +    return "\n".join(lines[:s] + [head + "print(" + "\n".join(b
+         +ody) + ")" + tail] + lines[e + 1:])                            
+      53  
+      54  
+      55  for nb_path in sorted(Path(".").glob("0*.ipynb")):
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ One cosmetic fix, since mkdir would print None. Then I'll actually run the two
+  fastest scripts to make sure they work end to end:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Operator precedence bug: / runs before %. Fixing it with parentheses:
+
+  Ran 1 shell command (ctrl+o to expand)
+⏺ I've added a .py script for each notebook, and the notebooks are unchanged:
+
+  01_eda_air_raid_alerts.ipynb   →  01_eda_air_raid_alerts.py
+  02_baseline_snaive.ipynb       →  02_baseline_snaive.py
+  03_models_lightgbm.ipynb       →  03_models_lightgbm.py
+  04_improved_models.ipynb       →  04_improved_models.py
+  05_rolling_cv_decay.ipynb      →  05_rolling_cv_decay.py
+  06_experiments_round2.ipynb    →  06_experiments_round2.py
+  07_telegram_features.ipynb     →  07_telegram_features.py
+  08_telegram_features_v2.ipynb  →  08_telegram_features_v2.py
+
+  How the scripts work (generated by export_scripts.py):
+  - Markdown cells become # comments, so each script reads like the notebook.
+  - Tables that a notebook would display at the end of a cell are wrapped in
+    print(...), so they appear in the terminal.
+  - plt.show() saves each chart to figures/<script>_NN.png instead of opening a
+    window, so long runs don't stop. I added figures/ to .gitignore.
+  - Run them from the project folder, for example .venv/bin/python
+    02_baseline_snaive.py.
+  - If you change a notebook, run .venv/bin/python export_scripts.py to
+    regenerate the scripts.
+
+  Checked:
+  - All 8 scripts compile.
+  - I ran 01 and 02 end to end. Both finished, saved 16 charts, and 02's scores
+    match the notebook (e.g. climatology for rear oblasts at 30 minutes: 0.145).
+  - I didn't run 03–08. They retrain the models: 05, 06 and 08 take 30 minutes
+    to over an hour each, and 07–08 need data/telegram_raw.parquet.
+
+  Running script 01 also rewrote the files in data/ from the same source data,
+  so their contents are the same.
+
+  I haven't committed these new files. Should I commit and push them to the
+  air-raid-forecasting branch?
+
+❯ make it more orginize using dirs
+
+⏺ I'll reorganise the project into folders: notebooks/, scripts/, src/, tests/,
+  dashboard/ and docs/. First I'll check which files git tracks, so I can move
+  them with git mv and keep their history:
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Now the paths. Notebooks and scripts need to find data/ and src/ from their
+  new folders. I'll add a small "go to project root" step at the top of each,
+  without touching their saved outputs:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Now verifying from different working folders: the tests, script 02 run from
+  inside scripts/, notebook 02 run from inside notebooks/, the dashboard
+  builder, and the scraper's --help:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Everything works from the new folders. Last, I'll add a README that explains
+  the layout, and update the old folder plan in PLAN.md:
+
+⏺ Write(README.md)
+  ⎿  Wrote 70 lines to README.md
+      1 # Air Raid Alert Start Forecasting — Ukraine
+      3 Forecasts, for each of 24 oblasts, the probability that an air ra
+        nly information available at forecast time (no data leakage). The
+         best model is LightGBM v4, with a mean per-oblast PR-AUC of **0.
+        p 2026), about 3.3× climatology. All results are in [docs/RESULTS
+      4
+      6 ```
+      7 ├── notebooks/            analysis & experiments, run in order (0
+      8 │   ├── 01_eda_air_raid_alerts.ipynb       exploratory analysis,
+      9 │   ├── 02_baseline_snaive.ipynb
+     … +104 lines (ctrl+o to expand)
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ .env.example has gone missing, so I'll recreate it, and update the structure
+  section of the plan:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ figures/ was meant to be git-ignored, but the earlier command that added it to
+  .gitignore failed before reaching that step. Fixing it and unstaging the
+  charts:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ The project is now organised into folders, and nothing was deleted:
+
+  agentic/
+  ├── README.md          ← new: structure, setup, how to run
+  ├── notebooks/         01 → 08 .ipynb (outputs kept)
+  ├── scripts/           01 → 08 .py, export_scripts.py, scrape_telegram.py
+  ├── src/               data.py, features.py, telegram.py
+  ├── tests/             leakage and parser tests
+  ├── dashboard/         make_dashboard.py, template.html, index.html
+  ├── docs/              PLAN.md, RESULTS.md, reports/, research_notes/
+  ├── data/              (git-ignored)
+  ├── figures/           charts from the scripts (git-ignored)
+  └── requirements.txt, .env.example, .gitignore
+
+  Path fixes:
+  - Notebooks and scripts now switch to the project root automatically, so they
+    find data/ and src/ whether you run them from the root, notebooks/ or
+    scripts/.
+  - Commands now include the folder, e.g. .venv/bin/python
+    scripts/02_baseline_snaive.py or .venv/bin/python scripts/scrape_telegram.py
+    --since 2025-01-25.
+  - Links to the research reports inside the notebooks now point to
+    docs/reports/.
+  - Section 4 of docs/PLAN.md now describes the folder structure that was
+    actually built.
+  - I recreated .env.example, which had gone missing. It contains only empty
+    placeholders.
+
+  Checked after the move:
+  - All 14 tests pass.
+  - Script 02 runs from inside scripts/, and notebook 02 runs from inside
+    notebooks/.
+  - The dashboard rebuilds, and scrape_telegram.py --help works from another
+    folder.
+
+  Files were moved with git mv, so their history is kept. The changes are staged
+  but not committed. Should I commit and push them to the air-raid-forecasting
+  branch?
+
+❯ push all changes in repo
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Someone already committed these changes, maybe you from VS Code: the branch is
+  one commit ahead of GitHub. I'll check that commit for secrets, then push:
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ All changes are pushed. The reorganisation had already been committed locally
+  as de4d2be orginize, probably from VS Code, so I pushed that commit. Your
+  branch now matches GitHub.
+
+  - Repository: https://github.com/AlonaNazarenko/agentic-school
+  - Branch: air-raid-forecasting, which now has 3 commits:
+    a. 6e1791e: the main project (EDA, baselines, LightGBM, walk-forward
+       evaluation, Telegram features)
+    b. a6bfba4: Telegram v2 results and the map dashboard
+    c. de4d2be: the folder reorganisation, README and .py scripts (33 files)
+  - No secrets or data were pushed. I checked that .env, the Telegram session,
+    data/ and figures/ aren't in the commit.
+
+  Two optional follow-ups:
+  - To make this the main version on GitHub, merge air-raid-forecasting into
+    main. That can be done with a pull request on GitHub.
+  - Before making the repo public, consider clearing the outputs of notebooks 07
+    and 08. They show a few sample Air Force posts, which matters because of
+    the Telegram terms-of-service question.
