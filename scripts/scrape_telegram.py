@@ -1,4 +1,4 @@
-"""Usage:  .venv/bin/python scrape_telegram.py --since 2025-06-01 [extra channels ...]
+"""Usage:  .venv/bin/python scripts/scrape_telegram.py --since 2025-06-01 [extra channels ...]
 
 Default channels: DEFAULT_CHANNELS (official Ukrainian Air Force). Extra channels are added to them.
 
@@ -6,6 +6,13 @@ Needs TG_API_ID / TG_API_HASH in .env (get them at https://my.telegram.org → A
 First run asks for your phone number and login code; the session is saved to data/tg_session.session.
 """
 import argparse
+import os
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+os.chdir(ROOT)                      # .env, data/ and the session file live in the project root
+sys.path.insert(0, str(ROOT))
 
 from src.telegram import scrape
 

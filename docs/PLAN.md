@@ -35,22 +35,10 @@ using only information available at **t**: the alert history of all oblasts and,
   - A unit test that randomly samples t, rebuilds the features from data truncated at t, and checks they're identical.
 
 ## 4. Notebooks / modules
-```
-data/                      raw + processed parquet
-src/
-  data.py                  download, clean, episodes, 5-min grid  (from notebook 01)
-  features.py              leakage-safe feature builder
-  evaluate.py              metrics, walk-forward splitter
-  telegram.py              (optional) scraping + keyword counts
-notebooks/
-  01_eda.ipynb             ✅ done
-  02_baselines.ipynb
-  03_features_gbm.ipynb
-  04_hawkes.ipynb
-  05_graph_nn.ipynb        (stretch)
-  06_telegram.ipynb        (optional)
-  07_final_evaluation.ipynb
-```
+The planned layout was implemented with some changes. See the project structure in [README.md](../README.md):
+`notebooks/` (01 → 08), `scripts/` (runnable .py versions + Telegram scraper), `src/` (data, features, telegram),
+`tests/`, `dashboard/`, `docs/`. Hawkes and GNN notebooks were not built: the Hawkes-proxy features (notebook 05)
+added no skill. Telegram became notebooks 07–08.
 
 ## 5. Modelling steps
 
